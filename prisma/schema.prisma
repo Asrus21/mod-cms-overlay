@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Cadastro de mods (secao 2.5): quem tem permissao de usar o painel.
+// Populado/atualizado a partir da verificacao de moderador na API da Twitch (secao 6).
+model Mod {
+  id            String   @id @default(cuid())
+  twitchUserId  String   @unique
+  twitchLogin   String
+  displayName   String
+  lastVerifiedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  auditLogs AuditLog[]
+
+  @@index([twitchLogin])
+}
+
+enum MediaType {
+  IMAGE
+  GIF
+  VIDEO
+}
+
+// Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no
+// armazenamento de arquivos (Vercel Blob), aqui guardamos so a URL.
+model Media {
+  id          String    @id @default(cuid())
+  name        String
+  type        MediaType
+  url         String
+  tags        String[]  @default([])
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  auditLogs AuditLog[]
+
+  @@index([type])
+  @@index([tags])
+}
+
+enum ActionType {
+  SHOW
+  CLEAR
+  UPLOAD
+}
+
+// Log de disparos (secao 2.5 / 7): auditoria de cada acao sensivel.
+model AuditLog {
+  id         String     @id @default(cuid())
+  action     ActionType
+  mod        Mod        @relation(fields: [modId], references: [id])
+  modId      String
+  media      Media?     @relation(fields: [mediaId], references: [id])
+  mediaId    String?
+  durationMs Int?
+  createdAt  DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([modId])
+}
