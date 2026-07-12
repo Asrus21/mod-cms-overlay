@@ -160,6 +160,15 @@ arquivos, não o conteúdo pesado em si.
 - Aplicativo mobile dedicado (o painel web funciona em qualquer navegador,
   incluindo celular)
 
+> **Adendo — feed ao vivo do mod (implementado):** além do disparo de mídias
+> (arquivos), o painel permite que um mod transmita **câmera ou tela ao vivo**
+> para o OBS do streamer. Isso é um fluxo separado, baseado em **WebRTC via
+> [VDO.Ninja](https://vdo.ninja)**: o vídeo trafega direto do mod para o OBS
+> (Browser Source com o link de *scene* da sala), **não** passa pelo backend
+> nem pela camada de tempo real (Pusher). O backend só registra no log de
+> auditoria quem foi ao vivo e quando (`/api/live`). Configuração via
+> `VDO_ROOM` / `VDO_PASSWORD`. Ver `lib/vdo.ts` e o README.
+
 ---
 
 ## 9. Resumo das responsabilidades por componente

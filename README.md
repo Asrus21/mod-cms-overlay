@@ -40,6 +40,7 @@ Serviços usados: **Vercel** (hospedagem), **Neon Postgres** (banco),
 | `/api/media/upload` | Recebe o arquivo e repassa ao Vercel Blob |
 | `/api/trigger/show` | Dispara uma mídia no overlay |
 | `/api/trigger/clear` | Limpa o overlay imediatamente |
+| `/api/live` | Registra no log que um mod foi ao vivo (feed via VDO.Ninja) |
 | `/api/audit` | Histórico de disparos/limpezas |
 
 ---
@@ -89,6 +90,8 @@ As de banco e blob já vieram das integrações. Adicione estas:
 | `PUSHER_CLUSTER` | ex.: `us2` |
 | `NEXT_PUBLIC_PUSHER_KEY` | **mesmo** valor de `PUSHER_KEY` |
 | `NEXT_PUBLIC_PUSHER_CLUSTER` | **mesmo** valor de `PUSHER_CLUSTER` |
+| `VDO_ROOM` | Nome secreto da sala do feed ao vivo (opcional — veja abaixo) |
+| `VDO_PASSWORD` | Senha da sala do feed ao vivo (opcional) |
 
 Gere o `SESSION_SECRET` com:
 
@@ -125,6 +128,42 @@ Pronto: o app sobe e as tabelas são criadas no Neon no build.
 6. Cada ação fica registrada no **Histórico** (quem, o quê, quando).
 
 O nome que o mod digita no login é o que aparece no histórico de auditoria.
+
+---
+
+## Feed ao vivo do mod (câmera/tela no seu OBS)
+
+Além de disparar mídias, um mod pode **transmitir a câmera ou a tela ao vivo**
+direto para o seu OBS. Isso usa o [VDO.Ninja](https://vdo.ninja) por baixo
+(WebRTC) — **sem port forwarding, sem expor IP, sem instalar nada**. O vídeo
+não passa pelo nosso servidor; o VDO.Ninja cuida da conexão e da rede.
+
+### Ativar (uma vez)
+
+1. Escolha um **nome de sala secreto** (qualquer texto aleatório e não óbvio —
+   ele funciona como senha). Defina em `VDO_ROOM` na Vercel.
+2. (Recomendado) Defina também uma `VDO_PASSWORD`.
+3. Redeploy.
+
+Sem `VDO_ROOM`, a seção "Transmitir ao vivo" fica desativada no painel.
+
+### No OBS (você, streamer)
+
+1. Entre no painel, abra **Transmitir ao vivo → Configurar no OBS** e copie o
+   link (ou pegue o link de *scene* do VDO.Ninja da sua sala).
+2. No OBS: **Fontes → + → Navegador**, cole o link, tamanho da cena.
+3. Esse único Browser Source mostra **automaticamente** qualquer mod que estiver
+   ao vivo naquele momento (fundo transparente para compor na cena).
+
+### Para os mods
+
+No painel, clicam em **📹 Transmitir câmera** ou **🖥️ Transmitir tela**. Abre
+uma aba do VDO.Ninja que começa a transmitir; **manter essa aba aberta** enquanto
+estiverem ao vivo. Fechar a aba encerra a transmissão. Cada "ao vivo" fica
+registrado no histórico.
+
+> Observação: por padrão o overlay mostra todos os mods que estiverem ao vivo ao
+> mesmo tempo. Fila/seleção de quem aparece pode ser adicionada depois.
 
 ---
 
