@@ -130,7 +130,10 @@ export function PainelClient({
         method: "POST",
         body: uploadForm,
       });
-      if (!uploadRes.ok) throw new Error("Falha no upload");
+      if (!uploadRes.ok) {
+        const data = await uploadRes.json().catch(() => ({}));
+        throw new Error(data.error || "Falha no upload");
+      }
       const { url } = await uploadRes.json();
 
       const tags = tagsInput.value
@@ -143,7 +146,10 @@ export function PainelClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: nameInput.value, type: typeInput.value, url, tags }),
       });
-      if (!createRes.ok) throw new Error("Falha ao cadastrar midia");
+      if (!createRes.ok) {
+        const data = await createRes.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao cadastrar midia");
+      }
       const { media: created } = await createRes.json();
 
       form.reset();
