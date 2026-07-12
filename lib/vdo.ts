@@ -58,3 +58,34 @@ export function buildSceneUrl(cfg: VdoConfig): string {
   params.set("transparent", "");
   return `${VDO_BASE}?${params.toString()}`;
 }
+
+// --- Tela do OBS ao vivo como fundo da mesa ---
+// O streamer transmite a "Camera Virtual" do OBS (= a tela inteira do OBS)
+// pelo VDO.Ninja; os paineis dos mods exibem esse feed como fundo da mesa.
+// Usamos push/view por um id de stream unico derivado da sala (que ja e
+// secreta), entao nao precisa de room.
+
+// Id de stream do feed da tela do OBS (unico e nao-obvio).
+export function obsSceneStreamId(room: string): string {
+  return `${streamIdFromName(room)}obsscene`;
+}
+
+// Link que o STREAMER abre para transmitir a tela do OBS. Sem autostart de
+// proposito: o streamer escolhe "OBS Virtual Camera" na tela do VDO.Ninja.
+export function buildObsPushUrl(cfg: VdoConfig): string {
+  const params = new URLSearchParams();
+  params.set("push", obsSceneStreamId(cfg.room));
+  if (cfg.password) params.set("password", cfg.password);
+  return `${VDO_BASE}?${params.toString()}`;
+}
+
+// Link (embutido em iframe) que os mods usam para VER a tela do OBS ao vivo.
+// cleanoutput = sem UI do VDO; noaudio = nao traz o audio do jogo.
+export function buildObsViewUrl(cfg: VdoConfig): string {
+  const params = new URLSearchParams();
+  params.set("view", obsSceneStreamId(cfg.room));
+  if (cfg.password) params.set("password", cfg.password);
+  params.set("cleanoutput", "");
+  params.set("noaudio", "");
+  return `${VDO_BASE}?${params.toString()}`;
+}

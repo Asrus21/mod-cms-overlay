@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -24,7 +25,17 @@ function clamp(v: number, min: number, max: number) {
 // fica fixa (sticky). Arrastando com o mouse aqui na previa, a posicao e
 // espelhada em tempo real no overlay (evento media:move). A escala tem um
 // controle deslizante. Audio nao entra na mesa (nao tem posicao visual).
-export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void }) {
+export function Mesa({
+  media,
+  onAction,
+  vdoRoom,
+  vdoPassword,
+}: {
+  media: Media[];
+  onAction: () => void;
+  vdoRoom: string;
+  vdoPassword: string;
+}) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const lastSentRef = useRef(0);
   const draggingRef = useRef(false);
@@ -39,6 +50,12 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
   // Fundo de referencia: um print da cena do OBS carregado localmente, so
   // como guia visual para posicionar (nao vai para o overlay/servidor).
   const [bgUrl, setBgUrl] = useState<string | null>(null);
+  // Fundo AO VIVO: embute a tela do OBS (transmitida pela Camera Virtual via
+  // VDO.Ninja) atras da mesa, para posicionar sobre a cena real em tempo real.
+  const [liveBg, setLiveBg] = useState(false);
+
+  const liveConfigured = Boolean(vdoRoom);
+  const cfg = { room: vdoRoom, password: vdoPassword };
 
   const placeable = media.filter((m) => m.type !== "AUDIO");
 
@@ -172,6 +189,37 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
         )}
       </div>
 
+      {liveConfigured && (
+        <div className="mesa-bg-row">
+          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <input
+              type="checkbox"
+              checked={liveBg}
+              onChange={(e) => setLiveBg(e.target.checked)}
+            />
+            Ver a tela do OBS ao vivo (fundo)
+          </label>
+          <button onClick={() => window.open(buildObsPushUrl(cfg), "_blank", "noopener")}>
+            📺 Transmitir a tela do OBS
+          </button>
+          <details className="obs-help">
+            <summary>Como transmitir a tela do OBS (streamer, uma vez)</summary>
+            <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
+              <li>No OBS, clique em <strong>Iniciar câmera virtual</strong>.</li>
+              <li>
+                Clique em <strong>Transmitir a tela do OBS</strong> acima: abre uma
+                aba do VDO.Ninja.
+              </li>
+              <li>
+                Nessa aba, escolha a câmera <strong>OBS Virtual Camera</strong> e
+                deixe a aba aberta.
+              </li>
+              <li>Marque <strong>Ver a tela do OBS ao vivo</strong> aqui.</li>
+            </ol>
+          </details>
+        </div>
+      )}
+
       <div className="mesa-bg-row">
         <label className="mesa-bg-label">
           Fundo de referência (print da cena)
@@ -210,6 +258,14 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
+        {liveBg && liveConfigured && (
+          <iframe
+            className="mesa-live-bg"
+            src={buildObsViewUrl(cfg)}
+            allow="autoplay; fullscreen"
+            title="Tela do OBS ao vivo"
+          />
+        )}
         {placed ? (
           <div
             className="mesa-item"
