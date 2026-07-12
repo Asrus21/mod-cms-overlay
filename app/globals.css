@@ -146,6 +146,38 @@ a {
   font-size: 0.9rem;
 }
 
+.diag-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.diag-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.diag-mark {
+  font-weight: 700;
+}
+
+.diag-item.ok .diag-mark {
+  color: #22c55e;
+}
+
+.diag-item.bad .diag-mark {
+  color: #ef4444;
+}
+
+.diag-hint {
+  color: #9aa2b1;
+}
+
 .mesa-controls {
   display: flex;
   gap: 0.5rem;
