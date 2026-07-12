@@ -39,6 +39,7 @@ Serviços usados: **Vercel** (hospedagem), **Neon Postgres** (banco),
 | `/api/media` | `GET` lista/filtra a biblioteca · `POST` cadastra mídia após upload |
 | `/api/media/upload` | Recebe o arquivo e repassa ao Vercel Blob |
 | `/api/trigger/show` | Dispara uma mídia no overlay |
+| `/api/trigger/move` | Atualiza posição/escala da mídia em tempo real (mesa) |
 | `/api/trigger/clear` | Limpa o overlay imediatamente |
 | `/api/live` | Registra no log que um mod foi ao vivo (feed via VDO.Ninja) |
 | `/api/audit` | Histórico de disparos/limpezas |
@@ -128,6 +129,23 @@ Pronto: o app sobe e as tabelas são criadas no Neon no build.
 6. Cada ação fica registrada no **Histórico** (quem, o quê, quando).
 
 O nome que o mod digita no login é o que aparece no histórico de auditoria.
+
+---
+
+## Mesa ao vivo (arrastar mídia com o mouse)
+
+Além do "flash" de 5s (botão **Mostrar**), o painel tem a **Mesa ao vivo**: o mod
+coloca uma imagem/gif/vídeo na tela e **arrasta com o mouse**, e o overlay do OBS
+**acompanha o movimento em tempo real** — sem compartilhar tela, sem câmera.
+
+Como funciona: a posição (x, y) e o tamanho são enviados como coordenadas
+normalizadas pela mesma camada de tempo real (Pusher) que já usamos; o overlay
+move o elemento na hora, com uma leve suavização entre os updates. Não precisa de
+nada além do Pusher que você já configurou.
+
+No painel: **Mesa ao vivo → escolha a mídia → Colocar na mesa**, depois arraste o
+item na prévia (que tem a proporção 16:9 da sua cena). O controle **Tamanho**
+ajusta a escala. **Tirar da mesa** remove do overlay.
 
 ---
 
