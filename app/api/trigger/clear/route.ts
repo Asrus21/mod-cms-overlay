@@ -20,8 +20,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Zera o estado persistido: um overlay que carregar depois nao deve
-  // mostrar nada.
-  await prisma.overlayState.deleteMany({});
+  // mostrar nada. Best-effort (a tabela pode ainda nao existir).
+  try {
+    await prisma.overlayState.deleteMany({});
+  } catch (err) {
+    console.warn("[overlayState] limpeza ignorada:", err instanceof Error ? err.message : err);
+  }
 
   await prisma.auditLog.create({
     data: {

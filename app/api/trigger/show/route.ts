@@ -88,11 +88,17 @@ export async function POST(request: NextRequest) {
     sticky,
     expiresAt: sticky ? null : new Date(Date.now() + durationMs),
   };
-  await prisma.overlayState.upsert({
-    where: { id: "current" },
-    update: stateData,
-    create: { id: "current", ...stateData },
-  });
+  // Best-effort: se a tabela OverlayState ainda nao existe (db push nao
+  // pegou), o disparo ja aconteceu; so perdemos a recuperacao de estado.
+  try {
+    await prisma.overlayState.upsert({
+      where: { id: "current" },
+      update: stateData,
+      create: { id: "current", ...stateData },
+    });
+  } catch (err) {
+    console.warn("[overlayState] upsert ignorado:", err instanceof Error ? err.message : err);
+  }
 
   await prisma.auditLog.create({
     data: {
