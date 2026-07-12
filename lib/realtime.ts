@@ -69,14 +69,38 @@ function getPusherServer(): Pusher {
   return pusherServer;
 }
 
+// Dispara no Pusher e, se ele responder erro (ex.: HTTP 400), levanta uma
+// mensagem que inclui o CORPO da resposta do Pusher — que diz o motivo real —
+// mais uma dica. Um 400/401 com as 4 variaveis presentes costuma ser
+// credencial ERRADA: cluster diferente do app, ou secret/app_id trocados.
+async function safeTrigger(event: string, data: unknown) {
+  try {
+    await getPusherServer().trigger(OVERLAY_CHANNEL, event, data);
+  } catch (err) {
+    const e = err as { message?: string; status?: number; body?: unknown };
+    const body =
+      e.body && typeof e.body !== "object"
+        ? String(e.body)
+        : e.body
+        ? JSON.stringify(e.body)
+        : "";
+    const status = e.status ? `HTTP ${e.status}` : e.message || "erro";
+    throw new Error(
+      `Pusher recusou o envio (${status})${body ? `: ${body}` : ""}. ` +
+        `Verifique se PUSHER_CLUSTER é o MESMO cluster do app no Pusher e se ` +
+        `PUSHER_APP_ID / PUSHER_KEY / PUSHER_SECRET são desse mesmo app.`
+    );
+  }
+}
+
 export async function publishShowMedia(payload: ShowMediaPayload) {
-  await getPusherServer().trigger(OVERLAY_CHANNEL, EVENT_SHOW, payload);
+  await safeTrigger(EVENT_SHOW, payload);
 }
 
 export async function publishMove(payload: MovePayload) {
-  await getPusherServer().trigger(OVERLAY_CHANNEL, EVENT_MOVE, payload);
+  await safeTrigger(EVENT_MOVE, payload);
 }
 
 export async function publishClear(payload: ClearPayload) {
-  await getPusherServer().trigger(OVERLAY_CHANNEL, EVENT_CLEAR, payload);
+  await safeTrigger(EVENT_CLEAR, payload);
 }
