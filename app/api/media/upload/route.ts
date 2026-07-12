@@ -10,14 +10,29 @@ export async function POST(request: NextRequest) {
   const { response } = requireMod(request);
   if (response) return response;
 
-  const formData = await request.formData();
-  const file = formData.get("file");
+  let file: FormDataEntryValue | null = null;
+  try {
+    const formData = await request.formData();
+    file = formData.get("file");
+  } catch {
+    return NextResponse.json(
+      { error: "Nao foi possivel ler o arquivo enviado" },
+      { status: 400 }
+    );
+  }
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Arquivo ausente" }, { status: 400 });
   }
 
-  const { url } = await uploadMediaFile(file);
-
-  return NextResponse.json({ url });
+  try {
+    const { url } = await uploadMediaFile(file);
+    return NextResponse.json({ url });
+  } catch (err) {
+    // Devolve o motivo real (ex.: token do Blob ausente) para o painel exibir,
+    // em vez de um generico "Falha no upload".
+    const message = err instanceof Error ? err.message : "Falha no upload";
+    console.error("Erro no upload:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
