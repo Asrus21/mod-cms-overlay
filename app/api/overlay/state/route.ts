@@ -8,7 +8,13 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const s = await prisma.overlayState.findUnique({ where: { id: "current" } });
+  let s = null;
+  try {
+    s = await prisma.overlayState.findUnique({ where: { id: "current" } });
+  } catch {
+    // Tabela pode ainda nao existir; trata como "nada na tela".
+    return NextResponse.json({ state: null });
+  }
 
   if (!s || !s.mediaId || !s.url) {
     return NextResponse.json({ state: null });
