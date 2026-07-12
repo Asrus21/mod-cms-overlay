@@ -197,6 +197,12 @@ a {
   flex: 1;
 }
 
+.mesa-scale-value {
+  min-width: 3ch;
+  text-align: right;
+  color: #9aa2b1;
+}
+
 /* Prévia com a mesma proporção do overlay (16:9). O mod arrasta o item
    dentro dela e a posição é espelhada no OBS. */
 .mesa-stage {
@@ -217,6 +223,7 @@ a {
   position: absolute;
   cursor: grab;
   touch-action: none;
+  /* largura = fracao da largura do palco (mesma proporcao do OBS) */
 }
 
 .mesa-item:active {
@@ -226,8 +233,8 @@ a {
 .mesa-item img,
 .mesa-item video {
   display: block;
-  max-width: 30vw;
-  max-height: 20vh;
+  width: 100%;
+  height: auto;
   pointer-events: none; /* o alvo do ponteiro é o wrapper .mesa-item */
 }
 
@@ -327,24 +334,25 @@ button:disabled {
   position: relative;
 }
 
-/* Elemento posicionado pela mesa de controle. left/top:0 + translate por
-   variaveis CSS mantem o centro da midia em (x,y) normalizados; a transicao
-   curta suaviza entre os updates de rede. */
+/* Elemento posicionado pela mesa de controle. O tamanho e uma FRACAO da
+   largura da tela (--s), entao a mesma proporcao vale na previa e no OBS
+   (WYSIWYG). O centro da midia fica em (x,y) normalizados; a transicao curta
+   suaviza entre os updates de rede. */
 .overlay-movable {
   position: absolute;
   left: 0;
   top: 0;
+  width: calc(var(--s, 0.3) * 100%);
   transform: translate(
-      calc(var(--x, 0.5) * 100vw - 50%),
-      calc(var(--y, 0.5) * 100vh - 50%)
-    )
-    scale(var(--s, 1));
-  transition: transform 0.08s linear;
-  will-change: transform;
+    calc(var(--x, 0.5) * 100vw - 50%),
+    calc(var(--y, 0.5) * 100vh - 50%)
+  );
+  transition: transform 0.08s linear, width 0.08s linear;
+  will-change: transform, width;
 }
 
 .overlay-media {
   display: block;
-  max-width: 60vw;
-  max-height: 60vh;
+  width: 100%;
+  height: auto;
 }
