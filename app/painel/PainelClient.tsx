@@ -268,7 +268,12 @@ export function PainelClient({
 
       <Diagnostico />
 
-      <Mesa media={media} onAction={loadHistory} />
+      <Mesa
+        media={media}
+        onAction={loadHistory}
+        vdoRoom={vdoRoom}
+        vdoPassword={vdoPassword}
+      />
 
       <section className="panel-section">
         <h2>Transmitir ao vivo</h2>
