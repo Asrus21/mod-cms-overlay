@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
   }
 
+  // Posicao (0..1) e tamanho (fracao da largura da tela, 0.02..3).
+  const x = clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1);
+  const y = clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1);
+  const scale = clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.02, 3);
+
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
     await publishShowMedia({
@@ -62,9 +67,9 @@ export async function POST(request: NextRequest) {
       durationMs,
       triggeredAt: Date.now(),
       sticky,
-      x: clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1),
-      y: clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1),
-      scale: clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5),
+      x,
+      y,
+      scale,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao publicar no overlay";
@@ -73,9 +78,6 @@ export async function POST(request: NextRequest) {
   }
 
   // Guarda o estado atual para o overlay recuperar ao (re)carregar no OBS.
-  const x = clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1);
-  const y = clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1);
-  const scale = clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5);
   const stateData = {
     mediaId: media.id,
     url: media.url,

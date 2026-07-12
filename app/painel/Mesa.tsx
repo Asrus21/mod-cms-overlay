@@ -32,7 +32,9 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
   const [selectedId, setSelectedId] = useState("");
   const [placed, setPlaced] = useState<Media | null>(null);
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
-  const [scale, setScale] = useState(1);
+  // scale = tamanho como FRACAO da largura da tela (0.05..1.5). Mesma
+  // proporcao vale na previa e no OBS (WYSIWYG).
+  const [scale, setScale] = useState(0.3);
   const [placing, setPlacing] = useState(false);
 
   const placeable = media.filter((m) => m.type !== "AUDIO");
@@ -160,12 +162,13 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
           Tamanho
           <input
             type="range"
-            min={0.2}
-            max={3}
-            step={0.05}
+            min={0.05}
+            max={1.5}
+            step={0.01}
             value={scale}
             onChange={onScaleChange}
           />
+          <span className="mesa-scale-value">{Math.round(scale * 100)}%</span>
         </label>
       )}
 
@@ -181,7 +184,8 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
             style={{
               left: `${pos.x * 100}%`,
               top: `${pos.y * 100}%`,
-              transform: `translate(-50%, -50%) scale(${scale})`,
+              width: `${scale * 100}%`,
+              transform: `translate(-50%, -50%)`,
             }}
             onPointerDown={onPointerDown}
           >
