@@ -108,7 +108,10 @@ export function PainelClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mediaId, durationMs: DEFAULT_DURATION_MS }),
     });
-    if (!res.ok) throw new Error("Falha ao disparar midia");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Falha ao disparar midia");
+    }
   }
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
@@ -183,7 +186,10 @@ export function PainelClient({
     setClearing(true);
     try {
       const res = await fetch("/api/trigger/clear", { method: "POST" });
-      if (!res.ok) throw new Error("Falha ao limpar overlay");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao limpar overlay");
+      }
       await loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao limpar overlay");

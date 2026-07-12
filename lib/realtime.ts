@@ -41,14 +41,30 @@ export type ClearPayload = {
 let pusherServer: Pusher | null = null;
 
 function getPusherServer(): Pusher {
+  const appId = process.env.PUSHER_APP_ID || "";
+  const key = process.env.PUSHER_KEY || "";
+  const secret = process.env.PUSHER_SECRET || "";
+  const cluster = process.env.PUSHER_CLUSTER || "";
+
+  // Erro claro quando as credenciais de SERVIDOR do Pusher faltam. Atencao:
+  // o "Conectado" verde no painel usa so NEXT_PUBLIC_PUSHER_KEY/CLUSTER
+  // (lado navegador). Publicar exige tambem APP_ID e SECRET aqui no servidor.
+  if (!appId || !key || !secret || !cluster) {
+    const faltando = [
+      !appId && "PUSHER_APP_ID",
+      !key && "PUSHER_KEY",
+      !secret && "PUSHER_SECRET",
+      !cluster && "PUSHER_CLUSTER",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      `Tempo real (Pusher) nao configurado no servidor. Faltando: ${faltando}. Defina no projeto Vercel e refaca o deploy.`
+    );
+  }
+
   if (!pusherServer) {
-    pusherServer = new Pusher({
-      appId: process.env.PUSHER_APP_ID || "",
-      key: process.env.PUSHER_KEY || "",
-      secret: process.env.PUSHER_SECRET || "",
-      cluster: process.env.PUSHER_CLUSTER || "us2",
-      useTLS: true,
-    });
+    pusherServer = new Pusher({ appId, key, secret, cluster, useTLS: true });
   }
   return pusherServer;
 }

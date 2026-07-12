@@ -11,14 +11,20 @@ export async function POST(request: NextRequest) {
   const { session, response } = requireMod(request);
   if (response) return response;
 
+  try {
+    await publishClear({ triggeredAt: Date.now() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Falha ao limpar overlay";
+    console.error("Erro no clear:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
   await prisma.auditLog.create({
     data: {
       action: ActionType.CLEAR,
       actor: session.name,
     },
   });
-
-  await publishClear({ triggeredAt: Date.now() });
 
   return NextResponse.json({ ok: true });
 }

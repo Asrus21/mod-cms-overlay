@@ -60,7 +60,10 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mediaId: item.id, sticky: true, x: 0.5, y: 0.5, scale }),
       });
-      if (!res.ok) throw new Error("Falha ao colocar na mesa");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao colocar na mesa");
+      }
       setPlaced(item);
       setPos({ x: 0.5, y: 0.5 });
       onAction();

@@ -27,13 +27,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "mediaId, x e y sao obrigatorios" }, { status: 400 });
   }
 
-  await publishMove({
-    mediaId: body.mediaId,
-    x: clamp(body.x, 0, 1),
-    y: clamp(body.y, 0, 1),
-    scale: clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5),
-    triggeredAt: Date.now(),
-  });
+  try {
+    await publishMove({
+      mediaId: body.mediaId,
+      x: clamp(body.x, 0, 1),
+      y: clamp(body.y, 0, 1),
+      scale: clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5),
+      triggeredAt: Date.now(),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Falha ao mover";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }
