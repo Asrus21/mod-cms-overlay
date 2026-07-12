@@ -1,17 +1,19 @@
-import { getServerSession } from "next-auth";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 import { PainelClient } from "./PainelClient";
 
-// A checagem "de verdade" ja acontece no middleware e em cada rota de API
-// (secao 6); isso aqui e so para ter os dados da sessao ja carregados no
-// primeiro render.
-export default async function PainelPage() {
-  const session = await getServerSession(authOptions);
+// A checagem "de verdade" acontece nas rotas de API (secao 6). Aqui validamos
+// a assinatura do cookie no servidor para ja ter o nome do mod no primeiro
+// render — e barrar quem forjou so a presenca do cookie para passar o
+// middleware.
+export default function PainelPage() {
+  const token = cookies().get(SESSION_COOKIE)?.value;
+  const session = verifySessionToken(token);
 
-  if (!session?.isMod) {
-    redirect("/api/auth/signin");
+  if (!session) {
+    redirect("/painel/login");
   }
 
-  return <PainelClient modName={session.twitchUserId ?? ""} />;
+  return <PainelClient modName={session.name} />;
 }

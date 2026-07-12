@@ -1,19 +1,21 @@
-import { getServerSession } from "next-auth";
-import { NextResponse } from "next/server";
-import { authOptions } from "./auth";
+import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE, verifySessionToken, type ModSession } from "./session";
 
 // Secao 6: toda acao sensivel e validada no backend a cada chamada, nunca
-// confiando apenas na UI do painel esconder/mostrar botoes. Usado por toda
-// rota de API que mute estado (mostrar midia, limpar, cadastrar midia).
-export async function requireMod() {
-  const session = await getServerSession(authOptions);
+// confiando apenas na UI. Usado por toda rota de API que muta estado
+// (mostrar midia, limpar, cadastrar midia).
+export function requireMod(request: NextRequest):
+  | { session: ModSession; response: null }
+  | { session: null; response: NextResponse } {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const session = verifySessionToken(token);
 
-  if (!session?.isMod || !session.modId) {
+  if (!session) {
     return {
       session: null,
       response: NextResponse.json({ error: "Nao autorizado" }, { status: 401 }),
-    } as const;
+    };
   }
 
-  return { session, response: null } as const;
+  return { session, response: null };
 }

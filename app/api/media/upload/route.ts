@@ -7,7 +7,7 @@ import { uploadMediaFile } from "@/lib/storage";
 // O registro na biblioteca (metadados) e criado em seguida via
 // POST /api/media (secao 5, passos 2-3).
 export async function POST(request: NextRequest) {
-  const { response } = await requireMod();
+  const { response } = requireMod(request);
   if (response) return response;
 
   const formData = await request.formData();
