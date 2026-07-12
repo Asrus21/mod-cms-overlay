@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
@@ -59,16 +59,29 @@ export function Mesa({
   //  - obs: a Camera Virtual do OBS via VDO.Ninja (tempo real; precisa transmitir)
   //  - ref: um print estatico carregado localmente
   const [bgMode, setBgMode] = useState<BgMode>("none");
+  // Canal da Twitch: comeca com o valor do servidor (se houver) e pode ser
+  // digitado/editado aqui (nome de canal e publico), salvo no navegador.
+  const [twitchCh, setTwitchCh] = useState(twitchChannel);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("twitchChannel");
+    if (saved) setTwitchCh(saved);
+  }, []);
+
+  function onTwitchChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value.trim();
+    setTwitchCh(v);
+    localStorage.setItem("twitchChannel", v);
+  }
 
   const liveConfigured = Boolean(vdoRoom);
-  const twitchConfigured = Boolean(twitchChannel);
   const cfg = { room: vdoRoom, password: vdoPassword };
 
   // parent exigido pelo player da Twitch = dominio que hospeda o embed.
   const twitchParent = typeof window !== "undefined" ? window.location.hostname : "";
-  const twitchSrc = twitchConfigured
+  const twitchSrc = twitchCh
     ? `https://player.twitch.tv/?channel=${encodeURIComponent(
-        twitchChannel
+        twitchCh
       )}&parent=${twitchParent}&muted=true&autoplay=true&controls=false`
     : "";
 
@@ -209,14 +222,18 @@ export function Mesa({
           Fundo da mesa (guia para posicionar)
           <select value={bgMode} onChange={(e) => setBgMode(e.target.value as BgMode)}>
             <option value="none">Nenhum</option>
-            {twitchConfigured && (
-              <option value="twitch">Transmissão da Twitch (não precisa abrir nada)</option>
-            )}
+            <option value="twitch">Transmissão da Twitch (não precisa abrir nada)</option>
             {liveConfigured && <option value="obs">Tela do OBS ao vivo (VDO.Ninja)</option>}
             <option value="ref">Imagem de referência (print)</option>
           </select>
         </label>
 
+        {bgMode === "twitch" && (
+          <label className="mesa-bg-label">
+            Canal da Twitch
+            <input value={twitchCh} onChange={onTwitchChange} placeholder="seu_canal" />
+          </label>
+        )}
         {bgMode === "obs" && liveConfigured && (
           <button onClick={() => window.open(buildObsPushUrl(cfg), "_blank", "noopener")}>
             📺 Transmitir a tela do OBS
@@ -243,11 +260,12 @@ export function Mesa({
           </ol>
         </details>
       )}
-      {bgMode === "twitch" && twitchConfigured && (
+      {bgMode === "twitch" && (
         <p className="mesa-bg-note">
-          Usa a sua transmissão da Twitch como fundo — você não precisa abrir nada.
-          Tem alguns segundos de atraso (normal da Twitch), o que não atrapalha para
-          posicionar.
+          Digite o nome do seu canal acima. Usa a sua transmissão da Twitch como
+          fundo — você não precisa abrir nada. Tem alguns segundos de atraso
+          (normal da Twitch), o que não atrapalha para posicionar. Só aparece com a
+          live no ar.
         </p>
       )}
 
@@ -289,7 +307,7 @@ export function Mesa({
             title="Tela do OBS ao vivo"
           />
         )}
-        {bgMode === "twitch" && twitchConfigured && twitchParent && (
+        {bgMode === "twitch" && twitchCh && twitchParent && (
           <iframe
             className="mesa-live-bg"
             src={twitchSrc}
