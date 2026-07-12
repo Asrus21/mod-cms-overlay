@@ -53,6 +53,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
   }
 
+  // Publica primeiro; so registra no log se o overlay realmente foi acionado.
+  try {
+    await publishShowMedia({
+      mediaId: media.id,
+      url: media.url,
+      type: media.type,
+      durationMs,
+      triggeredAt: Date.now(),
+      sticky,
+      x: clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1),
+      y: clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1),
+      scale: clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Falha ao publicar no overlay";
+    console.error("Erro no show:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
   await prisma.auditLog.create({
     data: {
       action: ActionType.SHOW,
@@ -61,18 +80,6 @@ export async function POST(request: NextRequest) {
       mediaName: media.name,
       durationMs: sticky ? null : durationMs,
     },
-  });
-
-  await publishShowMedia({
-    mediaId: media.id,
-    url: media.url,
-    type: media.type,
-    durationMs,
-    triggeredAt: Date.now(),
-    sticky,
-    x: clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1),
-    y: clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1),
-    scale: clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5),
   });
 
   return NextResponse.json({ ok: true });
