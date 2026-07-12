@@ -203,6 +203,22 @@ a {
   color: #9aa2b1;
 }
 
+.mesa-bg-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.mesa-bg-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #9aa2b1;
+}
+
 /* Prévia com a mesma proporção do overlay (16:9). O mod arrasta o item
    dentro dela e a posição é espelhada no OBS. */
 .mesa-stage {
