@@ -25,16 +25,20 @@ function clamp(v: number, min: number, max: number) {
 // fica fixa (sticky). Arrastando com o mouse aqui na previa, a posicao e
 // espelhada em tempo real no overlay (evento media:move). A escala tem um
 // controle deslizante. Audio nao entra na mesa (nao tem posicao visual).
+type BgMode = "none" | "twitch" | "obs" | "ref";
+
 export function Mesa({
   media,
   onAction,
   vdoRoom,
   vdoPassword,
+  twitchChannel,
 }: {
   media: Media[];
   onAction: () => void;
   vdoRoom: string;
   vdoPassword: string;
+  twitchChannel: string;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const lastSentRef = useRef(0);
@@ -50,12 +54,23 @@ export function Mesa({
   // Fundo de referencia: um print da cena do OBS carregado localmente, so
   // como guia visual para posicionar (nao vai para o overlay/servidor).
   const [bgUrl, setBgUrl] = useState<string | null>(null);
-  // Fundo AO VIVO: embute a tela do OBS (transmitida pela Camera Virtual via
-  // VDO.Ninja) atras da mesa, para posicionar sobre a cena real em tempo real.
-  const [liveBg, setLiveBg] = useState(false);
+  // Modo do fundo da mesa (guia visual para posicionar):
+  //  - twitch: a propria transmissao da Twitch (nao exige abrir nada; ~seg de atraso)
+  //  - obs: a Camera Virtual do OBS via VDO.Ninja (tempo real; precisa transmitir)
+  //  - ref: um print estatico carregado localmente
+  const [bgMode, setBgMode] = useState<BgMode>("none");
 
   const liveConfigured = Boolean(vdoRoom);
+  const twitchConfigured = Boolean(twitchChannel);
   const cfg = { room: vdoRoom, password: vdoPassword };
+
+  // parent exigido pelo player da Twitch = dominio que hospeda o embed.
+  const twitchParent = typeof window !== "undefined" ? window.location.hostname : "";
+  const twitchSrc = twitchConfigured
+    ? `https://player.twitch.tv/?channel=${encodeURIComponent(
+        twitchChannel
+      )}&parent=${twitchParent}&muted=true&autoplay=true&controls=false`
+    : "";
 
   const placeable = media.filter((m) => m.type !== "AUDIO");
 
@@ -189,44 +204,52 @@ export function Mesa({
         )}
       </div>
 
-      {liveConfigured && (
-        <div className="mesa-bg-row">
-          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <input
-              type="checkbox"
-              checked={liveBg}
-              onChange={(e) => setLiveBg(e.target.checked)}
-            />
-            Ver a tela do OBS ao vivo (fundo)
-          </label>
+      <div className="mesa-bg-row">
+        <label className="mesa-bg-label">
+          Fundo da mesa (guia para posicionar)
+          <select value={bgMode} onChange={(e) => setBgMode(e.target.value as BgMode)}>
+            <option value="none">Nenhum</option>
+            {twitchConfigured && (
+              <option value="twitch">Transmissão da Twitch (não precisa abrir nada)</option>
+            )}
+            {liveConfigured && <option value="obs">Tela do OBS ao vivo (VDO.Ninja)</option>}
+            <option value="ref">Imagem de referência (print)</option>
+          </select>
+        </label>
+
+        {bgMode === "obs" && liveConfigured && (
           <button onClick={() => window.open(buildObsPushUrl(cfg), "_blank", "noopener")}>
             📺 Transmitir a tela do OBS
           </button>
-          <details className="obs-help">
-            <summary>Como transmitir a tela do OBS (streamer, uma vez)</summary>
-            <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
-              <li>No OBS, clique em <strong>Iniciar câmera virtual</strong>.</li>
-              <li>
-                Clique em <strong>Transmitir a tela do OBS</strong> acima: abre uma
-                aba do VDO.Ninja.
-              </li>
-              <li>
-                Nessa aba, escolha a câmera <strong>OBS Virtual Camera</strong> e
-                deixe a aba aberta.
-              </li>
-              <li>Marque <strong>Ver a tela do OBS ao vivo</strong> aqui.</li>
-            </ol>
-          </details>
-        </div>
-      )}
-
-      <div className="mesa-bg-row">
-        <label className="mesa-bg-label">
-          Fundo de referência (print da cena)
-          <input type="file" accept="image/*" onChange={onPickBackground} />
-        </label>
-        {bgUrl && <button onClick={clearBackground}>Remover fundo</button>}
+        )}
+        {bgMode === "ref" && (
+          <>
+            <input type="file" accept="image/*" onChange={onPickBackground} />
+            {bgUrl && <button onClick={clearBackground}>Remover</button>}
+          </>
+        )}
       </div>
+
+      {bgMode === "obs" && liveConfigured && (
+        <details className="obs-help">
+          <summary>Como transmitir a tela do OBS (streamer, uma vez)</summary>
+          <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
+            <li>No OBS, clique em <strong>Iniciar câmera virtual</strong>.</li>
+            <li>Clique em <strong>Transmitir a tela do OBS</strong> acima.</li>
+            <li>
+              Na aba do VDO.Ninja, escolha a câmera <strong>OBS Virtual Camera</strong> e
+              deixe a aba aberta.
+            </li>
+          </ol>
+        </details>
+      )}
+      {bgMode === "twitch" && twitchConfigured && (
+        <p className="mesa-bg-note">
+          Usa a sua transmissão da Twitch como fundo — você não precisa abrir nada.
+          Tem alguns segundos de atraso (normal da Twitch), o que não atrapalha para
+          posicionar.
+        </p>
+      )}
 
       {placed && (
         <label className="mesa-scale">
@@ -247,7 +270,7 @@ export function Mesa({
         ref={stageRef}
         className="mesa-stage"
         style={
-          bgUrl
+          bgMode === "ref" && bgUrl
             ? {
                 backgroundImage: `url(${bgUrl})`,
                 backgroundSize: "cover",
@@ -258,12 +281,20 @@ export function Mesa({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        {liveBg && liveConfigured && (
+        {bgMode === "obs" && liveConfigured && (
           <iframe
             className="mesa-live-bg"
             src={buildObsViewUrl(cfg)}
             allow="autoplay; fullscreen"
             title="Tela do OBS ao vivo"
+          />
+        )}
+        {bgMode === "twitch" && twitchConfigured && twitchParent && (
+          <iframe
+            className="mesa-live-bg"
+            src={twitchSrc}
+            allow="autoplay; fullscreen"
+            title="Transmissão da Twitch"
           />
         )}
         {placed ? (
