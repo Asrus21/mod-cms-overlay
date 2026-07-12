@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Pusher from "pusher-js";
 import { OVERLAY_CHANNEL } from "@/lib/realtime";
+
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
 type Media = {
   id: string;
   name: string;
-  type: "IMAGE" | "GIF" | "VIDEO";
+  type: MediaType;
   url: string;
   tags: string[];
 };
@@ -16,22 +18,31 @@ type Media = {
 type AuditEntry = {
   id: string;
   action: "SHOW" | "CLEAR" | "UPLOAD";
+  actor: string;
+  mediaName: string | null;
   createdAt: string;
-  mod: { displayName: string };
-  media: { name: string } | null;
 };
 
 const DEFAULT_DURATION_MS = 5000;
 
+const TYPE_LABEL: Record<MediaType, string> = {
+  IMAGE: "Imagem",
+  GIF: "Gif",
+  VIDEO: "Video",
+  AUDIO: "Audio",
+};
+
 export function PainelClient({ modName }: { modName: string }) {
-  const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "disconnected">(
-    "connecting"
-  );
+  const router = useRouter();
+  const [connectionState, setConnectionState] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("connecting");
   const [media, setMedia] = useState<Media[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [history, setHistory] = useState<AuditEntry[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [autoShow, setAutoShow] = useState(true);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
 
@@ -81,6 +92,15 @@ export function PainelClient({ modName }: { modName: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, typeFilter]);
 
+  async function triggerShow(mediaId: string) {
+    const res = await fetch("/api/trigger/show", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mediaId, durationMs: DEFAULT_DURATION_MS }),
+    });
+    if (!res.ok) throw new Error("Falha ao disparar midia");
+  }
+
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -96,7 +116,10 @@ export function PainelClient({ modName }: { modName: string }) {
     try {
       const uploadForm = new FormData();
       uploadForm.append("file", file);
-      const uploadRes = await fetch("/api/media/upload", { method: "POST", body: uploadForm });
+      const uploadRes = await fetch("/api/media/upload", {
+        method: "POST",
+        body: uploadForm,
+      });
       if (!uploadRes.ok) throw new Error("Falha no upload");
       const { url } = await uploadRes.json();
 
@@ -111,9 +134,15 @@ export function PainelClient({ modName }: { modName: string }) {
         body: JSON.stringify({ name: nameInput.value, type: typeInput.value, url, tags }),
       });
       if (!createRes.ok) throw new Error("Falha ao cadastrar midia");
+      const { media: created } = await createRes.json();
 
       form.reset();
       await loadMedia();
+
+      // "Coloca la e aparece": opcionalmente ja dispara a midia recem-enviada.
+      if (autoShow && created?.id) {
+        await triggerShow(created.id);
+      }
       await loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao enviar midia");
@@ -125,12 +154,7 @@ export function PainelClient({ modName }: { modName: string }) {
   async function handleShow(item: Media) {
     setTriggeringId(item.id);
     try {
-      const res = await fetch("/api/trigger/show", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaId: item.id, durationMs: DEFAULT_DURATION_MS }),
-      });
-      if (!res.ok) throw new Error("Falha ao disparar midia");
+      await triggerShow(item.id);
       await loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao disparar midia");
@@ -152,6 +176,12 @@ export function PainelClient({ modName }: { modName: string }) {
     }
   }
 
+  async function handleLogout() {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/painel/login");
+    router.refresh();
+  }
+
   const statusLabel = useMemo(() => {
     if (connectionState === "connected") return "Conectado";
     if (connectionState === "connecting") return "Conectando...";
@@ -170,7 +200,7 @@ export function PainelClient({ modName }: { modName: string }) {
             <span className={`status-dot ${connectionState}`} />
             {statusLabel}
           </span>
-          <button onClick={() => signOut()}>Sair</button>
+          <button onClick={handleLogout}>Sair</button>
         </div>
       </div>
 
@@ -191,6 +221,7 @@ export function PainelClient({ modName }: { modName: string }) {
             <option value="IMAGE">Imagem</option>
             <option value="GIF">Gif</option>
             <option value="VIDEO">Video</option>
+            <option value="AUDIO">Audio</option>
           </select>
         </div>
 
@@ -199,10 +230,13 @@ export function PainelClient({ modName }: { modName: string }) {
             <div className="media-card" key={item.id}>
               {item.type === "VIDEO" ? (
                 <video className="media-thumb" src={item.url} muted />
+              ) : item.type === "AUDIO" ? (
+                <div className="media-thumb media-thumb-audio">🔊</div>
               ) : (
                 <img className="media-thumb" src={item.url} alt={item.name} />
               )}
               <strong>{item.name}</strong>
+              <span className="media-type">{TYPE_LABEL[item.type]}</span>
               <button
                 className="primary"
                 onClick={() => handleShow(item)}
@@ -218,15 +252,27 @@ export function PainelClient({ modName }: { modName: string }) {
 
       <section className="panel-section">
         <h2>Cadastrar nova midia</h2>
-        <form onSubmit={handleUpload} style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        <form
+          onSubmit={handleUpload}
+          style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
+        >
           <input name="name" placeholder="Nome" required />
           <select name="type" required defaultValue="IMAGE">
             <option value="IMAGE">Imagem</option>
             <option value="GIF">Gif</option>
             <option value="VIDEO">Video</option>
+            <option value="AUDIO">Audio</option>
           </select>
           <input name="tags" placeholder="Tags (separadas por virgula)" />
-          <input name="file" type="file" accept="image/*,video/*" required />
+          <input name="file" type="file" accept="image/*,video/*,audio/*" required />
+          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <input
+              type="checkbox"
+              checked={autoShow}
+              onChange={(e) => setAutoShow(e.target.checked)}
+            />
+            Mostrar no overlay assim que enviar
+          </label>
           <button className="primary" type="submit" disabled={uploading}>
             {uploading ? "Enviando..." : "Enviar"}
           </button>
@@ -238,8 +284,8 @@ export function PainelClient({ modName }: { modName: string }) {
         <ul className="history-list">
           {history.map((entry) => (
             <li key={entry.id}>
-              <strong>{entry.mod.displayName}</strong> — {entry.action}
-              {entry.media ? ` — ${entry.media.name}` : ""} —{" "}
+              <strong>{entry.actor}</strong> — {entry.action}
+              {entry.mediaName ? ` — ${entry.mediaName}` : ""} —{" "}
               {new Date(entry.createdAt).toLocaleString("pt-BR")}
             </li>
           ))}

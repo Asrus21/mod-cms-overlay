@@ -1,22 +1,28 @@
-// Protege as paginas do painel (/painel). A aplicacao das regras de
-// autorizacao "de verdade" acontece em cada rota de API (lib/require-mod.ts,
-// secao 6) — este middleware e so a camada de UX que evita renderizar o
-// painel para quem nao esta logado ou nao e mod, redirecionando cedo.
+// Protege as paginas do painel (/painel/*). A autorizacao "de verdade"
+// acontece em cada rota de API (lib/require-mod.ts, secao 6) verificando a
+// ASSINATURA do cookie; aqui no edge fazemos apenas a checagem barata de
+// presenca do cookie para redirecionar cedo quem nem logou. A pagina de
+// login em si fica liberada.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { SESSION_COOKIE } from "@/lib/session-cookie";
 
 export const config = {
   matcher: ["/painel/:path*"],
 };
 
-export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-  if (!token || !token.isMod) {
+  if (pathname === "/painel/login") {
+    return NextResponse.next();
+  }
+
+  const hasCookie = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  if (!hasCookie) {
     const url = request.nextUrl.clone();
-    url.pathname = "/api/auth/signin";
-    url.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    url.pathname = "/painel/login";
+    url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
 

@@ -10,7 +10,7 @@ export const EVENT_CLEAR = "media:clear";
 export type ShowMediaPayload = {
   mediaId: string;
   url: string;
-  type: "IMAGE" | "GIF" | "VIDEO";
+  type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
   durationMs: number;
   triggeredAt: number;
 };

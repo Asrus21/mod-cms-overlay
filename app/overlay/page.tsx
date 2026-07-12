@@ -56,10 +56,14 @@ export default function OverlayPage() {
     };
   }, []);
 
+  // No OBS o autoplay (inclusive com som) e permitido, entao video e audio
+  // tocam sozinhos. Fora do OBS, navegadores podem bloquear som sem gesto.
   return (
     <div className="overlay-root">
       {current?.type === "VIDEO" ? (
-        <video className="overlay-media" src={current.url} autoPlay muted />
+        <video className="overlay-media" src={current.url} autoPlay playsInline />
+      ) : current?.type === "AUDIO" ? (
+        <audio src={current.url} autoPlay />
       ) : current ? (
         <img className="overlay-media" src={current.url} alt="" />
       ) : null}

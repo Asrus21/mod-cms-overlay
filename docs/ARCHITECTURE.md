@@ -125,6 +125,14 @@ arquivos, não o conteúdo pesado em si.
 
 ## 6. Autenticação e autorização
 
+> **Nota de implementação (atual):** a primeira versão online usa uma
+> **senha compartilhada** (`MOD_ACCESS_KEY`) em vez de Twitch OAuth, para
+> simplificar a operação. O mod entra com o próprio nome + a senha; o backend
+> valida a senha e devolve um cookie de sessão **assinado por HMAC**
+> (`lib/session.ts`). O nome informado alimenta o log de auditoria. O texto
+> abaixo descreve o desenho original com Twitch OAuth, que continua sendo a
+> evolução natural caso se queira identidade individual forte por mod.
+
 - Login feito via Twitch OAuth, o mesmo mecanismo já usado em outros
   projetos do canal
 - Após o login, o sistema confirma junto à API da Twitch se aquele usuário

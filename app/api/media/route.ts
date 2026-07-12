@@ -6,7 +6,7 @@ import { ActionType, MediaType, Prisma } from "@prisma/client";
 // GET /api/media?tag=&type=&q= — biblioteca de midias (secao 2.1: busca e
 // filtra por tag, tipo ou nome).
 export async function GET(request: NextRequest) {
-  const { response } = await requireMod();
+  const { response } = requireMod(request);
   if (response) return response;
 
   const { searchParams } = new URL(request.url);
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 // POST /api/media — cadastra o registro apos o upload direto ao
 // armazenamento de arquivos (secao 5, passo 3).
 export async function POST(request: NextRequest) {
-  const { session, response } = await requireMod();
+  const { session, response } = requireMod(request);
   if (response) return response;
 
   const body = (await request.json()) as {
@@ -56,15 +56,16 @@ export async function POST(request: NextRequest) {
       type: body.type as MediaType,
       url: body.url,
       tags: body.tags ?? [],
-      createdById: session!.modId!,
+      createdBy: session.name,
     },
   });
 
   await prisma.auditLog.create({
     data: {
       action: ActionType.UPLOAD,
-      modId: session!.modId!,
+      actor: session.name,
       mediaId: media.id,
+      mediaName: media.name,
     },
   });
 

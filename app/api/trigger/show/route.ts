@@ -10,7 +10,7 @@ const MAX_DURATION_MS = 5 * 60 * 1000;
 // POST /api/trigger/show — cenario "mostrar midia" (secao 3), passos 3-5:
 // autoriza, registra auditoria e publica o evento de exibicao.
 export async function POST(request: NextRequest) {
-  const { session, response } = await requireMod();
+  const { session, response } = requireMod(request);
   if (response) return response;
 
   const body = (await request.json()) as { mediaId?: string; durationMs?: number };
@@ -30,8 +30,9 @@ export async function POST(request: NextRequest) {
   await prisma.auditLog.create({
     data: {
       action: ActionType.SHOW,
-      modId: session!.modId!,
+      actor: session.name,
       mediaId: media.id,
+      mediaName: media.name,
       durationMs: body.durationMs,
     },
   });
