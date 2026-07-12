@@ -23,6 +23,7 @@ enum ActionType {
   SHOW
   CLEAR
   UPLOAD
+  LIVE
 }
 
 // Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no

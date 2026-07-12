@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Pusher from "pusher-js";
 import { OVERLAY_CHANNEL } from "@/lib/realtime";
+import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -17,7 +18,7 @@ type Media = {
 
 type AuditEntry = {
   id: string;
-  action: "SHOW" | "CLEAR" | "UPLOAD";
+  action: "SHOW" | "CLEAR" | "UPLOAD" | "LIVE";
   actor: string;
   mediaName: string | null;
   createdAt: string;
@@ -32,7 +33,15 @@ const TYPE_LABEL: Record<MediaType, string> = {
   AUDIO: "Audio",
 };
 
-export function PainelClient({ modName }: { modName: string }) {
+export function PainelClient({
+  modName,
+  vdoRoom,
+  vdoPassword,
+}: {
+  modName: string;
+  vdoRoom: string;
+  vdoPassword: string;
+}) {
   const router = useRouter();
   const [connectionState, setConnectionState] = useState<
     "connecting" | "connected" | "disconnected"
@@ -182,6 +191,45 @@ export function PainelClient({ modName }: { modName: string }) {
     router.refresh();
   }
 
+  // Feed ao vivo via VDO.Ninja: abre a aba de transmissao do mod e registra
+  // no log que ele foi ao vivo. O video trafega pelo VDO.Ninja direto para o
+  // OBS (link de scene), nao passa pelo nosso backend.
+  const liveEnabled = Boolean(vdoRoom);
+  const streamId = useMemo(() => streamIdFromName(modName), [modName]);
+  const sceneUrl = useMemo(
+    () => (liveEnabled ? buildSceneUrl({ room: vdoRoom, password: vdoPassword }) : ""),
+    [liveEnabled, vdoRoom, vdoPassword]
+  );
+
+  async function goLive(kind: "camera" | "screen") {
+    const url = buildPushUrl(
+      { room: vdoRoom, password: vdoPassword },
+      streamId,
+      { screenshare: kind === "screen" }
+    );
+    // Abre ANTES do await para nao ser bloqueado como popup pelo navegador.
+    window.open(url, "_blank", "noopener");
+    try {
+      await fetch("/api/live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      });
+      await loadHistory();
+    } catch {
+      // registro de auditoria e best-effort; nao impede a transmissao.
+    }
+  }
+
+  async function copyScene() {
+    try {
+      await navigator.clipboard.writeText(sceneUrl);
+      alert("Link do OBS copiado!");
+    } catch {
+      alert(sceneUrl);
+    }
+  }
+
   const statusLabel = useMemo(() => {
     if (connectionState === "connected") return "Conectado";
     if (connectionState === "connecting") return "Conectando...";
@@ -203,6 +251,42 @@ export function PainelClient({ modName }: { modName: string }) {
           <button onClick={handleLogout}>Sair</button>
         </div>
       </div>
+
+      <section className="panel-section">
+        <h2>Transmitir ao vivo</h2>
+        {liveEnabled ? (
+          <>
+            <p>
+              Abre sua câmera ou tela ao vivo no OBS do streamer. Mantenha a aba
+              que abrir aberta enquanto estiver transmitindo.
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button className="primary" onClick={() => goLive("camera")}>
+                📹 Transmitir câmera
+              </button>
+              <button className="primary" onClick={() => goLive("screen")}>
+                🖥️ Transmitir tela
+              </button>
+            </div>
+            <details className="obs-help">
+              <summary>Configurar no OBS (uma vez, feito pelo streamer)</summary>
+              <p>
+                No OBS: Fontes → + → Navegador, e cole o link abaixo. Ele mostra
+                automaticamente quem estiver ao vivo.
+              </p>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <input readOnly value={sceneUrl} style={{ flex: "1 1 260px" }} />
+                <button onClick={copyScene}>Copiar</button>
+              </div>
+            </details>
+          </>
+        ) : (
+          <p>
+            Recurso desativado. Configure a variável <code>VDO_ROOM</code> (e,
+            opcionalmente, <code>VDO_PASSWORD</code>) para habilitar o ao vivo.
+          </p>
+        )}
+      </section>
 
       <section className="panel-section">
         <h2>Disparar / Limpar</h2>

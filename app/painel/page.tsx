@@ -15,5 +15,12 @@ export default function PainelPage() {
     redirect("/painel/login");
   }
 
-  return <PainelClient modName={session.name} />;
+  // Config do feed ao vivo (VDO.Ninja). Lida SO no servidor e repassada
+  // apenas para o painel autenticado, para a sala nao vazar no bundle publico.
+  const vdoRoom = process.env.VDO_ROOM || "";
+  const vdoPassword = process.env.VDO_PASSWORD || "";
+
+  return (
+    <PainelClient modName={session.name} vdoRoom={vdoRoom} vdoPassword={vdoPassword} />
+  );
 }
