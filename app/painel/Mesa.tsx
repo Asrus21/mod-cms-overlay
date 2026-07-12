@@ -36,8 +36,23 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
   // proporcao vale na previa e no OBS (WYSIWYG).
   const [scale, setScale] = useState(0.3);
   const [placing, setPlacing] = useState(false);
+  // Fundo de referencia: um print da cena do OBS carregado localmente, so
+  // como guia visual para posicionar (nao vai para o overlay/servidor).
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
 
   const placeable = media.filter((m) => m.type !== "AUDIO");
+
+  function onPickBackground(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (bgUrl) URL.revokeObjectURL(bgUrl);
+    setBgUrl(URL.createObjectURL(file));
+  }
+
+  function clearBackground() {
+    if (bgUrl) URL.revokeObjectURL(bgUrl);
+    setBgUrl(null);
+  }
 
   function sendMove(x: number, y: number, s: number, force = false) {
     if (!placed) return;
@@ -157,6 +172,14 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
         )}
       </div>
 
+      <div className="mesa-bg-row">
+        <label className="mesa-bg-label">
+          Fundo de referência (print da cena)
+          <input type="file" accept="image/*" onChange={onPickBackground} />
+        </label>
+        {bgUrl && <button onClick={clearBackground}>Remover fundo</button>}
+      </div>
+
       {placed && (
         <label className="mesa-scale">
           Tamanho
@@ -175,6 +198,15 @@ export function Mesa({ media, onAction }: { media: Media[]; onAction: () => void
       <div
         ref={stageRef}
         className="mesa-stage"
+        style={
+          bgUrl
+            ? {
+                backgroundImage: `url(${bgUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
