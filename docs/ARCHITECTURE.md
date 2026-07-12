@@ -160,6 +160,15 @@ arquivos, não o conteúdo pesado em si.
 - Aplicativo mobile dedicado (o painel web funciona em qualquer navegador,
   incluindo celular)
 
+> **Adendo — mesa ao vivo (implementado):** além do disparo de mídia por
+> tempo fixo, o painel tem uma "mesa" onde o mod **arrasta a mídia com o
+> mouse** e o overlay acompanha o movimento em **tempo real**. Reusa a mesma
+> camada de tempo real (Pusher): a mídia é colocada com `sticky` (não some
+> sozinha) via `media:show`, e a posição/escala (coordenadas normalizadas
+> 0..1) é transmitida com alta frequência pelo evento `media:move`
+> (`/api/trigger/move`, sem gravar no banco). O overlay descarta updates fora
+> de ordem e suaviza o movimento por CSS. Ver `app/painel/Mesa.tsx`.
+
 > **Adendo — feed ao vivo do mod (implementado):** além do disparo de mídias
 > (arquivos), o painel permite que um mod transmita **câmera ou tela ao vivo**
 > para o OBS do streamer. Isso é um fluxo separado, baseado em **WebRTC via

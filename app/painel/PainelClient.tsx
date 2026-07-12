@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Pusher from "pusher-js";
 import { OVERLAY_CHANNEL } from "@/lib/realtime";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
+import { Mesa } from "./Mesa";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -251,6 +252,8 @@ export function PainelClient({
           <button onClick={handleLogout}>Sair</button>
         </div>
       </div>
+
+      <Mesa media={media} onAction={loadHistory} />
 
       <section className="panel-section">
         <h2>Transmitir ao vivo</h2>

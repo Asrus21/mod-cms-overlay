@@ -1,29 +1,40 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Pusher from "pusher-js";
 import {
   EVENT_CLEAR,
+  EVENT_MOVE,
   EVENT_SHOW,
   OVERLAY_CHANNEL,
   type ClearPayload,
+  type MovePayload,
   type ShowMediaPayload,
 } from "@/lib/realtime";
 
+type Placed = {
+  media: ShowMediaPayload;
+  x: number;
+  y: number;
+  scale: number;
+};
+
 // Pagina "tela em branco" carregada como Browser Source no OBS (secao 2.2).
-// Sem UI de controle: so ouve a camada de tempo real e reage.
+// Sem UI de controle: so ouve a camada de tempo real e reage. Alem de
+// mostrar/limpar, acompanha a posicao/escala enviadas em tempo real pela
+// mesa de controle (evento media:move).
 export default function OverlayPage() {
-  const [current, setCurrent] = useState<ShowMediaPayload | null>(null);
+  const [placed, setPlaced] = useState<Placed | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Guarda o timestamp do disparo em exibicao para desempate: se um evento
-  // "limpar" chegar depois do "mostrar" mais recente (mesmo fora de ordem
-  // por latencia de rede), a limpeza sempre vence (secao 4, passo 6).
   const currentTriggeredAtRef = useRef(0);
+  // Ultima atualizacao de posicao aplicada, para descartar moves que chegarem
+  // fora de ordem pela rede (evita "pulos" da imagem).
+  const lastMoveAtRef = useRef(0);
 
   function clearOverlay() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = null;
-    setCurrent(null);
+    setPlaced(null);
   }
 
   useEffect(() => {
@@ -38,13 +49,34 @@ export default function OverlayPage() {
       currentTriggeredAtRef.current = payload.triggeredAt;
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      setCurrent(payload);
-      timeoutRef.current = setTimeout(clearOverlay, payload.durationMs);
+      timeoutRef.current = null;
+      lastMoveAtRef.current = payload.triggeredAt;
+
+      setPlaced({
+        media: payload,
+        x: payload.x ?? 0.5,
+        y: payload.y ?? 0.5,
+        scale: payload.scale ?? 1,
+      });
+
+      // sticky (mesa) nao some sozinho; flash some depois de durationMs.
+      if (!payload.sticky && payload.durationMs > 0) {
+        timeoutRef.current = setTimeout(clearOverlay, payload.durationMs);
+      }
+    });
+
+    channel.bind(EVENT_MOVE, (payload: MovePayload) => {
+      if (payload.triggeredAt < lastMoveAtRef.current) return; // fora de ordem
+      lastMoveAtRef.current = payload.triggeredAt;
+      // So move se for a midia atualmente na tela.
+      setPlaced((prev) =>
+        prev && prev.media.mediaId === payload.mediaId
+          ? { ...prev, x: payload.x, y: payload.y, scale: payload.scale }
+          : prev
+      );
     });
 
     channel.bind(EVENT_CLEAR, (payload: ClearPayload) => {
-      // Limpeza sempre tem prioridade, mesmo que chegue "antes" no
-      // timestamp de um show que ainda esta em transito.
       currentTriggeredAtRef.current = Math.max(currentTriggeredAtRef.current, payload.triggeredAt);
       clearOverlay();
     });
@@ -56,17 +88,30 @@ export default function OverlayPage() {
     };
   }, []);
 
-  // No OBS o autoplay (inclusive com som) e permitido, entao video e audio
-  // tocam sozinhos. Fora do OBS, navegadores podem bloquear som sem gesto.
+  if (!placed) return <div className="overlay-root" />;
+
+  // Posiciona pelo centro da midia via transform (suave e performatico).
+  // A pequena transicao interpola entre as atualizacoes de rede, deixando o
+  // movimento fluido mesmo recebendo ~15-20 updates por segundo.
+  const style: CSSProperties = {
+    "--x": placed.x,
+    "--y": placed.y,
+    "--s": placed.scale,
+  } as CSSProperties;
+
   return (
     <div className="overlay-root">
-      {current?.type === "VIDEO" ? (
-        <video className="overlay-media" src={current.url} autoPlay playsInline />
-      ) : current?.type === "AUDIO" ? (
-        <audio src={current.url} autoPlay />
-      ) : current ? (
-        <img className="overlay-media" src={current.url} alt="" />
-      ) : null}
+      {placed.media.type === "AUDIO" ? (
+        <audio src={placed.media.url} autoPlay />
+      ) : (
+        <div className="overlay-movable" style={style}>
+          {placed.media.type === "VIDEO" ? (
+            <video className="overlay-media" src={placed.media.url} autoPlay playsInline />
+          ) : (
+            <img className="overlay-media" src={placed.media.url} alt="" />
+          )}
+        </div>
+      )}
     </div>
   );
 }
