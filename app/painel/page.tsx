@@ -19,8 +19,16 @@ export default function PainelPage() {
   // apenas para o painel autenticado, para a sala nao vazar no bundle publico.
   const vdoRoom = process.env.VDO_ROOM || "";
   const vdoPassword = process.env.VDO_PASSWORD || "";
+  // Canal da Twitch para usar a propria transmissao como fundo da mesa
+  // (nao exige o streamer abrir nada — a live ja esta no ar).
+  const twitchChannel = process.env.TWITCH_CHANNEL || "";
 
   return (
-    <PainelClient modName={session.name} vdoRoom={vdoRoom} vdoPassword={vdoPassword} />
+    <PainelClient
+      modName={session.name}
+      vdoRoom={vdoRoom}
+      vdoPassword={vdoPassword}
+      twitchChannel={twitchChannel}
+    />
   );
 }

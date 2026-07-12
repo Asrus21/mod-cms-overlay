@@ -39,10 +39,12 @@ export function PainelClient({
   modName,
   vdoRoom,
   vdoPassword,
+  twitchChannel,
 }: {
   modName: string;
   vdoRoom: string;
   vdoPassword: string;
+  twitchChannel: string;
 }) {
   const router = useRouter();
   const [connectionState, setConnectionState] = useState<
@@ -273,6 +275,7 @@ export function PainelClient({
         onAction={loadHistory}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}
+        twitchChannel={twitchChannel}
       />
 
       <section className="panel-section">
