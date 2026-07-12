@@ -6,6 +6,7 @@ import Pusher from "pusher-js";
 import { OVERLAY_CHANNEL } from "@/lib/realtime";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
+import { Diagnostico } from "./Diagnostico";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -264,6 +265,8 @@ export function PainelClient({
           <button onClick={handleLogout}>Sair</button>
         </div>
       </div>
+
+      <Diagnostico />
 
       <Mesa media={media} onAction={loadHistory} />
 
