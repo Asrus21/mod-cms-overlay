@@ -41,6 +41,23 @@ model Media {
   @@index([tags])
 }
 
+// Estado atual do overlay (linha unica, id = "current"). Serve para o
+// overlay recuperar o que esta na tela ao (re)carregar no OBS, ja que o
+// Pusher nao repete eventos passados. Sem isso, um browser source que
+// reconecta/atualiza fica em branco ate o proximo disparo.
+model OverlayState {
+  id        String     @id
+  mediaId   String?
+  url       String?
+  type      MediaType?
+  x         Float      @default(0.5)
+  y         Float      @default(0.5)
+  scale     Float      @default(1)
+  sticky    Boolean    @default(false)
+  expiresAt DateTime? // para "flash" (nao-sticky): some sozinho depois disso
+  updatedAt DateTime   @updatedAt
+}
+
 // Log de disparos (secao 2.5 / 7): auditoria de cada acao sensivel.
 // Guarda um snapshot do nome da midia para o historico nao quebrar caso a
 // midia seja removida depois.

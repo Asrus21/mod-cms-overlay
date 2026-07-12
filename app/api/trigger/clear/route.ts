@@ -19,6 +19,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
+  // Zera o estado persistido: um overlay que carregar depois nao deve
+  // mostrar nada.
+  await prisma.overlayState.deleteMany({});
+
   await prisma.auditLog.create({
     data: {
       action: ActionType.CLEAR,

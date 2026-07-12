@@ -37,9 +37,50 @@ export default function OverlayPage() {
     setPlaced(null);
   }
 
+  // Busca o estado atual no servidor. Chamado ao carregar e a cada reconexao
+  // do Pusher, para o overlay recuperar o que esta na tela mesmo tendo
+  // perdido o evento ao vivo (Pusher nao repete eventos).
+  async function syncState() {
+    // Se um evento ao vivo (show/clear) chegar durante o fetch, nao
+    // sobrescrevemos com o estado (possivelmente mais antigo) do banco.
+    const startedAt = currentTriggeredAtRef.current;
+    try {
+      const res = await fetch("/api/overlay/state", { cache: "no-store" });
+      if (!res.ok) return;
+      const { state } = await res.json();
+      if (currentTriggeredAtRef.current !== startedAt) return;
+      if (!state) {
+        setPlaced(null);
+        return;
+      }
+      setPlaced({
+        media: {
+          mediaId: state.mediaId,
+          url: state.url,
+          type: state.type,
+          durationMs: 0,
+          triggeredAt: 0,
+          sticky: state.sticky,
+        },
+        x: state.x,
+        y: state.y,
+        scale: state.scale,
+      });
+    } catch {
+      // silencioso; o Pusher ainda pode entregar ao vivo.
+    }
+  }
+
   useEffect(() => {
+    syncState();
+
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY || "", {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "us2",
+    });
+
+    // Ao (re)conectar, re-sincroniza — cobre quedas de rede do browser source.
+    pusher.connection.bind("connected", () => {
+      syncState();
     });
 
     const channel = pusher.subscribe(OVERLAY_CHANNEL);

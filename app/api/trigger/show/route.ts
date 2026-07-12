@@ -72,6 +72,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
+  // Guarda o estado atual para o overlay recuperar ao (re)carregar no OBS.
+  const x = clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1);
+  const y = clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1);
+  const scale = clamp(typeof body.scale === "number" ? body.scale : 1, 0.1, 5);
+  const stateData = {
+    mediaId: media.id,
+    url: media.url,
+    type: media.type,
+    x,
+    y,
+    scale,
+    sticky,
+    expiresAt: sticky ? null : new Date(Date.now() + durationMs),
+  };
+  await prisma.overlayState.upsert({
+    where: { id: "current" },
+    update: stateData,
+    create: { id: "current", ...stateData },
+  });
+
   await prisma.auditLog.create({
     data: {
       action: ActionType.SHOW,
