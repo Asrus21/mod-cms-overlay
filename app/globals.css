@@ -276,7 +276,17 @@ a {
   pointer-events: none; /* o alvo do ponteiro é o wrapper .mesa-item */
 }
 
-/* Alças de redimensionamento nos cantos (arraste para ajustar o tamanho). */
+/* Modo "esticado": altura fixa; a midia preenche a caixa (pode distorcer). */
+.mesa-item.stretched img,
+.mesa-item.stretched video {
+  height: 100%;
+  object-fit: fill;
+}
+
+/* Alças de redimensionamento estilo OBS:
+   - cantos (tl/tr/bl/br): ajustam largura e altura juntas (proporcional).
+   - laterais (l/r): ajustam SO a largura (horizontal).
+   - topo/base (t/b): ajustam SO a altura (vertical). */
 .mesa-handle {
   position: absolute;
   width: 14px;
@@ -307,6 +317,52 @@ a {
   right: -7px;
   bottom: -7px;
   cursor: nwse-resize;
+}
+.mesa-handle.t {
+  left: 50%;
+  top: -7px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.mesa-handle.b {
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.mesa-handle.l {
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.mesa-handle.r {
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+/* Selo do audio na mesa (audio nao tem posicao/tamanho: so um indicador). */
+.mesa-audio-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  background: rgba(18, 21, 28, 0.9);
+  border: 1px solid #2a2f3a;
+  text-align: center;
+  z-index: 1;
+}
+
+.mesa-audio-badge .icon {
+  font-size: 2rem;
 }
 
 .mesa-hint {
@@ -418,12 +474,24 @@ button:disabled {
     calc(var(--x, 0.5) * 100vw - 50%),
     calc(var(--y, 0.5) * 100vh - 50%)
   );
-  transition: transform 0.08s linear, width 0.08s linear;
-  will-change: transform, width;
+  transition: transform 0.08s linear, width 0.08s linear, height 0.08s linear;
+  will-change: transform, width, height;
+}
+
+/* Modo "esticado": altura fixa (--sy). Permite ajustar largura e altura de
+   forma independente (o mod pode distorcer a midia de proposito). Sem esta
+   classe a altura e natural (mantem a proporcao original). */
+.overlay-movable.stretched {
+  height: calc(var(--sy, 0.3) * 100%);
 }
 
 .overlay-media {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.overlay-movable.stretched .overlay-media {
+  height: 100%;
+  object-fit: fill;
 }

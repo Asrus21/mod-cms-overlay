@@ -17,6 +17,8 @@ type Placed = {
   x: number;
   y: number;
   scale: number;
+  // altura como fracao da tela; nulo = altura natural (mantem a proporcao).
+  scaleY: number | null;
 };
 
 // Pagina "tela em branco" carregada como Browser Source no OBS (secao 2.2).
@@ -65,6 +67,7 @@ export default function OverlayPage() {
         x: state.x,
         y: state.y,
         scale: state.scale,
+        scaleY: state.scaleY ?? null,
       });
     } catch {
       // silencioso; o Pusher ainda pode entregar ao vivo.
@@ -98,6 +101,7 @@ export default function OverlayPage() {
         x: payload.x ?? 0.5,
         y: payload.y ?? 0.5,
         scale: payload.scale ?? 1,
+        scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
       });
 
       // sticky (mesa) nao some sozinho; flash some depois de durationMs.
@@ -112,7 +116,13 @@ export default function OverlayPage() {
       // So move se for a midia atualmente na tela.
       setPlaced((prev) =>
         prev && prev.media.mediaId === payload.mediaId
-          ? { ...prev, x: payload.x, y: payload.y, scale: payload.scale }
+          ? {
+              ...prev,
+              x: payload.x,
+              y: payload.y,
+              scale: payload.scale,
+              scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
+            }
           : prev
       );
     });
@@ -134,20 +144,32 @@ export default function OverlayPage() {
   // Posiciona pelo centro da midia via transform (suave e performatico).
   // A pequena transicao interpola entre as atualizacoes de rede, deixando o
   // movimento fluido mesmo recebendo ~15-20 updates por segundo.
+  // scaleY definido => altura fixa (estica na vertical, pode distorcer);
+  // nulo => altura natural (mantem a proporcao original).
+  const stretched = placed.scaleY != null;
   const style: CSSProperties = {
     "--x": placed.x,
     "--y": placed.y,
     "--s": placed.scale,
+    ...(stretched ? { "--sy": placed.scaleY } : {}),
   } as CSSProperties;
 
   return (
     <div className="overlay-root">
       {placed.media.type === "AUDIO" ? (
-        <audio src={placed.media.url} autoPlay />
+        // key = triggeredAt: re-disparar o mesmo audio recria o elemento e toca de novo.
+        <audio key={placed.media.triggeredAt} src={placed.media.url} autoPlay />
       ) : (
-        <div className="overlay-movable" style={style}>
+        <div className={`overlay-movable${stretched ? " stretched" : ""}`} style={style}>
           {placed.media.type === "VIDEO" ? (
-            <video className="overlay-media" src={placed.media.url} autoPlay playsInline />
+            <video
+              key={placed.media.triggeredAt}
+              className="overlay-media"
+              src={placed.media.url}
+              autoPlay
+              loop
+              playsInline
+            />
           ) : (
             <img className="overlay-media" src={placed.media.url} alt="" />
           )}

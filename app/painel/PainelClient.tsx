@@ -117,6 +117,28 @@ export function PainelClient({
     }
   }
 
+  // Ao escolher o arquivo, ja detecta o tipo (imagem/gif/video/audio) pelo
+  // MIME. Assim o mod nao esquece de trocar o seletor (motivo comum de "nao
+  // aparece o video" / "nao toca o audio": foi cadastrado como Imagem).
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const form = e.target.form;
+    if (!file || !form) return;
+    const typeSel = form.elements.namedItem("type") as HTMLSelectElement | null;
+    const nameInput = form.elements.namedItem("name") as HTMLInputElement | null;
+    const mime = file.type;
+    let detected: MediaType = "IMAGE";
+    if (mime.startsWith("video/")) detected = "VIDEO";
+    else if (mime.startsWith("audio/")) detected = "AUDIO";
+    else if (mime === "image/gif") detected = "GIF";
+    else if (mime.startsWith("image/")) detected = "IMAGE";
+    if (typeSel) typeSel.value = detected;
+    // Preenche o nome com o do arquivo (sem extensao) se estiver vazio.
+    if (nameInput && !nameInput.value) {
+      nameInput.value = file.name.replace(/\.[^.]+$/, "");
+    }
+  }
+
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -374,7 +396,13 @@ export function PainelClient({
             <option value="AUDIO">Audio</option>
           </select>
           <input name="tags" placeholder="Tags (separadas por virgula)" />
-          <input name="file" type="file" accept="image/*,video/*,audio/*" required />
+          <input
+            name="file"
+            type="file"
+            accept="image/*,video/*,audio/*"
+            onChange={onPickFile}
+            required
+          />
           <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <input
               type="checkbox"
