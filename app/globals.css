@@ -260,6 +260,7 @@ a {
   cursor: grab;
   touch-action: none;
   z-index: 1;
+  outline: 1px solid rgba(99, 102, 241, 0.9); /* seleção estilo OBS */
   /* largura = fracao da largura do palco (mesma proporcao do OBS) */
 }
 
@@ -273,6 +274,39 @@ a {
   width: 100%;
   height: auto;
   pointer-events: none; /* o alvo do ponteiro é o wrapper .mesa-item */
+}
+
+/* Alças de redimensionamento nos cantos (arraste para ajustar o tamanho). */
+.mesa-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border: 1px solid #6366f1;
+  border-radius: 3px;
+  z-index: 2;
+  touch-action: none;
+}
+
+.mesa-handle.tl {
+  left: -7px;
+  top: -7px;
+  cursor: nwse-resize;
+}
+.mesa-handle.tr {
+  right: -7px;
+  top: -7px;
+  cursor: nesw-resize;
+}
+.mesa-handle.bl {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+.mesa-handle.br {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
 }
 
 .mesa-hint {
