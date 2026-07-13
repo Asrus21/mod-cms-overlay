@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       mediaId: body.mediaId,
       x: clamp(body.x, 0, 1),
       y: clamp(body.y, 0, 1),
-      scale: clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.02, 3),
+      scale: clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.005, 3),
       triggeredAt: Date.now(),
     });
   } catch (err) {
