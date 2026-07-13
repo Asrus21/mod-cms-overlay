@@ -47,7 +47,8 @@ model Media {
 // reconecta/atualiza fica em branco ate o proximo disparo.
 model OverlayState {
   id        String     @id
-  owner     String     @default("") // mod dono deste item (mesa por mod)
+  streamer  String     @default("") // streamer dono do overlay (overlay compartilhado)
+  owner     String     @default("") // mod que colocou o item (mesa individual por mod)
   mediaId   String?
   url       String?
   type      MediaType?
@@ -62,6 +63,7 @@ model OverlayState {
   expiresAt DateTime? // para "flash" (nao-sticky): some sozinho depois disso
   updatedAt DateTime   @updatedAt
 
+  @@index([streamer])
   @@index([owner])
 }
 

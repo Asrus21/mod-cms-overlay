@@ -9,13 +9,15 @@ import Pusher from "pusher";
 // Cada midia colocada tem um `itemId` unico (varias instancias, sem limite;
 // ate a mesma midia pode aparecer mais de uma vez).
 //
-// Cada mod tem a SUA mesa: um canal por mod (`overlay-<slug>`). O painel
-// publica no canal do proprio mod e o overlay do OBS assina o canal daquele
-// mod (via ?mod=<slug> na URL). Assim a mesa de um mod nao aparece na de outro.
+// O overlay e por STREAMER: um canal por streamer (`overlay-<streamer>`). Todos
+// os mods que atendem aquele streamer publicam no mesmo canal, e o OBS do
+// streamer assina esse canal (link permanente /overlay/<streamer>). Cada item
+// guarda o `owner` (mod que colocou) para a mesa ser individual por mod e para
+// o "limpar" remover so os itens do proprio mod.
 export const OVERLAY_CHANNEL_PREFIX = "overlay-";
 
-export function overlayChannel(owner: string): string {
-  return `${OVERLAY_CHANNEL_PREFIX}${owner}`;
+export function overlayChannel(streamer: string): string {
+  return `${OVERLAY_CHANNEL_PREFIX}${streamer}`;
 }
 
 export const EVENT_SHOW = "media:show";
@@ -25,6 +27,7 @@ export const EVENT_CLEAR = "media:clear";
 
 export type ShowMediaPayload = {
   itemId: string;
+  owner: string; // mod que colocou (para mesa por mod e clear por mod)
   mediaId: string;
   url: string;
   type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
@@ -69,6 +72,8 @@ export type RemovePayload = {
 };
 
 export type ClearPayload = {
+  // Limpa apenas os itens deste mod (mesa individual). Ausente = limpa tudo.
+  owner?: string;
   triggeredAt: number;
 };
 
@@ -127,18 +132,18 @@ async function safeTrigger(channel: string, event: string, data: unknown) {
   }
 }
 
-export async function publishShowMedia(owner: string, payload: ShowMediaPayload) {
-  await safeTrigger(overlayChannel(owner), EVENT_SHOW, payload);
+export async function publishShowMedia(streamer: string, payload: ShowMediaPayload) {
+  await safeTrigger(overlayChannel(streamer), EVENT_SHOW, payload);
 }
 
-export async function publishMove(owner: string, payload: MovePayload) {
-  await safeTrigger(overlayChannel(owner), EVENT_MOVE, payload);
+export async function publishMove(streamer: string, payload: MovePayload) {
+  await safeTrigger(overlayChannel(streamer), EVENT_MOVE, payload);
 }
 
-export async function publishRemove(owner: string, payload: RemovePayload) {
-  await safeTrigger(overlayChannel(owner), EVENT_REMOVE, payload);
+export async function publishRemove(streamer: string, payload: RemovePayload) {
+  await safeTrigger(overlayChannel(streamer), EVENT_REMOVE, payload);
 }
 
-export async function publishClear(owner: string, payload: ClearPayload) {
-  await safeTrigger(overlayChannel(owner), EVENT_CLEAR, payload);
+export async function publishClear(streamer: string, payload: ClearPayload) {
+  await safeTrigger(overlayChannel(streamer), EVENT_CLEAR, payload);
 }

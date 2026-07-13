@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { streamerSlug, modSlug } from "@/lib/accounts";
 
-// GET /api/overlay/state?mod=<slug> — estado atual da mesa DE UM MOD (todos os
-// itens dele) para o browser source do OBS recuperar o que esta na tela ao
-// carregar/reconectar (o Pusher nao repete eventos). Publico de proposito: o
-// overlay roda no OBS sem login e so devolve o que ja esta visivel na live
-// daquele mod.
+// GET /api/overlay/state?streamer=<slug>[&owner=<mod>] — estado atual do
+// overlay de um STREAMER (todos os itens dele) para o browser source do OBS
+// recuperar o que esta na tela ao carregar/reconectar (o Pusher nao repete
+// eventos). Publico de proposito. Com &owner=<mod>, filtra so os itens daquele
+// mod — usado pela mesa (individual por mod) ao recarregar o painel.
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const owner = request.nextUrl.searchParams.get("mod")?.trim();
-  if (!owner) {
+  const streamer = streamerSlug(request.nextUrl.searchParams.get("streamer") || "");
+  if (!streamer) {
     return NextResponse.json({ items: [] });
   }
+  const ownerParam = request.nextUrl.searchParams.get("owner");
+  const owner = ownerParam ? modSlug(ownerParam) : null;
 
   let rows = null as Awaited<ReturnType<typeof prisma.overlayState.findMany>> | null;
   try {
-    rows = await prisma.overlayState.findMany({ where: { owner } });
+    rows = await prisma.overlayState.findMany({
+      where: owner ? { streamer, owner } : { streamer },
+    });
   } catch {
     // Tabela pode ainda nao existir; trata como "nada na tela".
     return NextResponse.json({ items: [] });
@@ -24,8 +29,7 @@ export async function GET(request: NextRequest) {
 
   const now = Date.now();
 
-  // "flash" ja expirado nao deve reaparecer. Limpa do banco de forma
-  // best-effort (nao bloqueia a resposta se falhar).
+  // "flash" ja expirado nao deve reaparecer. Limpa do banco (best-effort).
   const expiredIds = rows
     .filter((r) => r.expiresAt && r.expiresAt.getTime() < now)
     .map((r) => r.id);
@@ -37,6 +41,7 @@ export async function GET(request: NextRequest) {
     .filter((r) => r.mediaId && r.url && !(r.expiresAt && r.expiresAt.getTime() < now))
     .map((r) => ({
       itemId: r.id,
+      owner: r.owner,
       mediaId: r.mediaId,
       url: r.url,
       type: r.type,

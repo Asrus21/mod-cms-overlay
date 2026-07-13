@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishShowMedia } from "@/lib/realtime";
-import { modSlug } from "@/lib/accounts";
+import { modSlug, streamerSlug } from "@/lib/accounts";
 import { ActionType } from "@prisma/client";
 
 const MIN_DURATION_MS = 1000;
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
     itemId?: string;
     mediaId?: string;
+    streamer?: string;
     durationMs?: number;
     sticky?: boolean;
     x?: number;
@@ -41,14 +42,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "mediaId e obrigatorio" }, { status: 400 });
   }
 
-  // Cada exibicao e um "item" independente na mesa (varios coexistem). A mesa
-  // manda o seu itemId; o flash ("Mostrar") nao manda, entao geramos um.
+  // Overlay por streamer: a midia vai para o overlay do streamer escolhido.
+  const streamer = streamerSlug(body.streamer || "");
+  if (!streamer) {
+    return NextResponse.json({ error: "Escolha um streamer primeiro" }, { status: 400 });
+  }
+
+  // Cada exibicao e um "item" independente (varios coexistem). A mesa manda o
+  // seu itemId; o flash ("Mostrar") nao manda, entao geramos um.
   const itemId =
     typeof body.itemId === "string" && body.itemId
       ? body.itemId
       : `it_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-  // Mesa isolada por mod: o dono e o mod logado.
+  // Mesa individual por mod: o dono do item e o mod logado.
   const owner = modSlug(session.name);
 
   const sticky = Boolean(body.sticky);
@@ -82,8 +89,9 @@ export async function POST(request: NextRequest) {
 
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
-    await publishShowMedia(owner, {
+    await publishShowMedia(streamer, {
       itemId,
+      owner,
       mediaId: media.id,
       url: media.url,
       type: media.type,
@@ -106,6 +114,7 @@ export async function POST(request: NextRequest) {
 
   // Guarda o estado atual para o overlay recuperar ao (re)carregar no OBS.
   const stateData = {
+    streamer,
     owner,
     mediaId: media.id,
     url: media.url,

@@ -70,6 +70,8 @@ type BgMode = "none" | "twitch" | "obs" | "ref";
 export function Mesa({
   media,
   modSlug,
+  streamerSlug,
+  streamerName,
   onAction,
   vdoRoom,
   vdoPassword,
@@ -77,6 +79,8 @@ export function Mesa({
 }: {
   media: Media[];
   modSlug: string;
+  streamerSlug: string;
+  streamerName: string;
   onAction: () => void;
   vdoRoom: string;
   vdoPassword: string;
@@ -112,16 +116,27 @@ export function Mesa({
     if (saved) setTwitchCh(saved);
   }, []);
 
-  // Recupera os itens que ja estao na mesa deste mod (ao recarregar o painel),
-  // para o mod continuar de onde parou em vez de ver a mesa vazia.
-  const recoveredRef = useRef(false);
+  // Recupera os itens DESTE mod NESTE streamer ao (re)carregar o painel ou ao
+  // trocar de streamer — o mod continua de onde parou em vez de ver a mesa
+  // vazia. Mesa individual por mod: filtra por owner = o proprio mod.
   useEffect(() => {
-    if (recoveredRef.current) return;
-    recoveredRef.current = true;
-    fetch(`/api/overlay/state?mod=${encodeURIComponent(modSlug)}`, { cache: "no-store" })
+    if (!streamerSlug) {
+      setItems([]);
+      setSelectedId("");
+      return;
+    }
+    let cancelled = false;
+    fetch(
+      `/api/overlay/state?streamer=${encodeURIComponent(streamerSlug)}&owner=${encodeURIComponent(modSlug)}`,
+      { cache: "no-store" }
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!data || !Array.isArray(data.items)) return;
+        if (cancelled) return;
+        if (!data || !Array.isArray(data.items)) {
+          setItems([]);
+          return;
+        }
         type Row = {
           itemId: string;
           mediaId: string;
@@ -156,11 +171,14 @@ export function Mesa({
             hidden: Boolean(row.hidden),
           };
         });
-        if (recovered.length) setItems(recovered);
+        setItems(recovered);
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modSlug]);
+  }, [streamerSlug, modSlug]);
 
   // Aplica volume/mudo/oculto aos elementos da previa sempre que os itens mudam.
   useEffect(() => {
@@ -238,6 +256,7 @@ export function Mesa({
       body: JSON.stringify({
         itemId: item.itemId,
         mediaId: item.media.id,
+        streamer: streamerSlug,
         x: item.x,
         y: item.y,
         scale: item.scaleX,
@@ -253,6 +272,10 @@ export function Mesa({
   async function handlePlace() {
     const item = media.find((m) => m.id === pickId);
     if (!item) return;
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
     setPlacing(true);
     const itemId = genId();
     // Cascata leve para os itens nao empilharem exatamente no centro.
@@ -273,8 +296,8 @@ export function Mesa({
     try {
       const payload =
         item.type === "AUDIO"
-          ? { itemId, mediaId: item.id, sticky: true, volume: 1, muted: false }
-          : { itemId, mediaId: item.id, sticky: true, x, y, scale: 0.3, volume: 1, muted: false };
+          ? { itemId, mediaId: item.id, streamer: streamerSlug, sticky: true, volume: 1, muted: false }
+          : { itemId, mediaId: item.id, streamer: streamerSlug, sticky: true, x, y, scale: 0.3, volume: 1, muted: false };
       const res = await fetch("/api/trigger/show", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -304,7 +327,7 @@ export function Mesa({
       await fetch("/api/trigger/remove", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId }),
+        body: JSON.stringify({ itemId, streamer: streamerSlug }),
       });
     } finally {
       onAction();
@@ -501,10 +524,24 @@ export function Mesa({
             </option>
           ))}
         </select>
-        <button className="primary" onClick={handlePlace} disabled={!pickId || placing}>
+        <button
+          className="primary"
+          onClick={handlePlace}
+          disabled={!pickId || placing || !streamerSlug}
+        >
           {placing ? "Colocando…" : "Colocar na mesa"}
         </button>
       </div>
+
+      {streamerSlug ? (
+        <p className="mesa-bg-note">
+          Colocando no overlay de <strong>{streamerName || streamerSlug}</strong>.
+        </p>
+      ) : (
+        <p className="mesa-bg-note">
+          Escolha um <strong>streamer</strong> na seção acima para começar.
+        </p>
+      )}
 
       <div className="mesa-bg-row">
         <label className="mesa-bg-label">
