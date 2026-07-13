@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 
 // Armazenamento de arquivos (secao 2.6). O binario vai direto para o Blob;
 // o backend so recebe e persiste a URL resultante (secao 5).
@@ -15,4 +15,15 @@ export async function uploadMediaFile(file: File): Promise<{ url: string }> {
     access: "public",
   });
   return { url: blob.url };
+}
+
+// Apaga o binario do Blob (best-effort). Usado ao excluir uma midia da
+// biblioteca. Nao falha se o token nao existir ou o arquivo ja tiver sumido.
+export async function deleteMediaFile(url: string): Promise<void> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return;
+  try {
+    await del(url);
+  } catch {
+    // best-effort: o registro ja foi removido; nao bloqueia por causa do blob.
+  }
 }

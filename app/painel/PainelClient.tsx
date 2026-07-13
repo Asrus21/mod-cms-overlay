@@ -81,6 +81,7 @@ export function PainelClient({
   const [uploading, setUploading] = useState(false);
   const [autoShow, setAutoShow] = useState(true);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
 
   // Status da conexao em tempo real (secao 2.1 / 7): o mod precisa saber se
@@ -254,6 +255,25 @@ export function PainelClient({
       alert(err instanceof Error ? err.message : "Erro ao disparar midia");
     } finally {
       setTriggeringId(null);
+    }
+  }
+
+  async function handleDeleteMedia(item: Media) {
+    if (!confirm(`Excluir "${item.name}" da biblioteca? Isso não pode ser desfeito.`)) {
+      return;
+    }
+    setDeletingMediaId(item.id);
+    try {
+      const res = await fetch(`/api/media/${item.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao excluir mídia");
+      }
+      await loadMedia();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir mídia");
+    } finally {
+      setDeletingMediaId(null);
     }
   }
 
@@ -526,13 +546,25 @@ export function PainelClient({
               )}
               <strong>{item.name}</strong>
               <span className="media-type">{TYPE_LABEL[item.type]}</span>
-              <button
-                className="primary"
-                onClick={() => handleShow(item)}
-                disabled={triggeringId === item.id}
-              >
-                {triggeringId === item.id ? "Disparando..." : "Mostrar"}
-              </button>
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <button
+                  className="primary"
+                  style={{ flex: 1 }}
+                  onClick={() => handleShow(item)}
+                  disabled={triggeringId === item.id}
+                >
+                  {triggeringId === item.id ? "Disparando..." : "Mostrar"}
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => handleDeleteMedia(item)}
+                  disabled={deletingMediaId === item.id}
+                  title="Excluir da biblioteca"
+                  aria-label="Excluir"
+                >
+                  {deletingMediaId === item.id ? "…" : "🗑"}
+                </button>
+              </div>
             </div>
           ))}
           {media.length === 0 && <p>Nenhuma midia encontrada.</p>}
