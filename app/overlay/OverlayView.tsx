@@ -14,7 +14,7 @@ import {
   type ShowMediaPayload,
 } from "@/lib/realtime";
 
-type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
 
 type Item = {
   itemId: string;
@@ -22,6 +22,7 @@ type Item = {
   mediaId: string;
   url: string;
   type: MediaType;
+  text: string;
   triggeredAt: number;
   x: number;
   y: number;
@@ -119,6 +120,7 @@ export function OverlayView({ streamer }: { streamer: string }) {
         mediaId: payload.mediaId,
         url: payload.url,
         type: payload.type,
+        text: payload.text || "",
         triggeredAt: payload.triggeredAt,
         x: payload.x ?? 0.5,
         y: payload.y ?? 0.5,
@@ -196,6 +198,19 @@ export function OverlayView({ streamer }: { streamer: string }) {
     <div className="overlay-root">
       {items.map((it) => {
         if (it.hidden) return null;
+
+        if (it.type === "TEXT") {
+          const style = {
+            "--x": it.x,
+            "--y": it.y,
+            "--s": it.scale,
+          } as CSSProperties;
+          return (
+            <div key={it.itemId} className="overlay-movable text-item" style={style}>
+              <span className="overlay-text">{it.text}</span>
+            </div>
+          );
+        }
 
         if (it.type === "AUDIO") {
           return (

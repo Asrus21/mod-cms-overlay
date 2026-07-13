@@ -16,7 +16,7 @@ const StageBg = memo(function StageBg({ src, title }: { src: string; title: stri
   );
 });
 
-type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
 
 type Media = {
   id: string;
@@ -31,6 +31,7 @@ type Media = {
 type PlacedItem = {
   itemId: string;
   media: Media;
+  text?: string; // conteudo quando media.type === "TEXT"
   x: number;
   y: number;
   scaleX: number;
@@ -106,6 +107,8 @@ export function Mesa({
   // Midia escolhida no seletor para "Colocar na mesa".
   const [pickId, setPickId] = useState("");
   const [placing, setPlacing] = useState(false);
+  // Caixa de texto: o mod digita e "Adicionar texto" coloca no meio da mesa.
+  const [textInput, setTextInput] = useState("");
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
@@ -139,9 +142,10 @@ export function Mesa({
         }
         type Row = {
           itemId: string;
-          mediaId: string;
-          url: string;
+          mediaId: string | null;
+          url: string | null;
           type: MediaType;
+          text?: string | null;
           x: number;
           y: number;
           scale: number;
@@ -151,17 +155,18 @@ export function Mesa({
           hidden?: boolean;
         };
         const recovered: PlacedItem[] = (data.items as Row[]).map((row) => {
-          const found = media.find((m) => m.id === row.mediaId);
+          const found = row.mediaId ? media.find((m) => m.id === row.mediaId) : undefined;
           const mediaObj: Media = found ?? {
-            id: row.mediaId,
-            name: row.mediaId,
+            id: row.mediaId ?? row.itemId,
+            name: row.type === "TEXT" ? (row.text ?? "") : (row.mediaId ?? ""),
             type: row.type,
-            url: row.url,
+            url: row.url ?? "",
             tags: [],
           };
           return {
             itemId: row.itemId,
             media: mediaObj,
+            text: row.text ?? undefined,
             x: row.x,
             y: row.y,
             scaleX: row.scale,
@@ -317,6 +322,54 @@ export function Mesa({
     }
   }
 
+  async function handleAddText() {
+    const content = textInput.trim();
+    if (!content) return;
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    const itemId = genId();
+    const placed: PlacedItem = {
+      itemId,
+      media: { id: itemId, name: content.slice(0, 40), type: "TEXT", url: "", tags: [] },
+      text: content,
+      x: 0.5,
+      y: 0.5,
+      scaleX: 0.04,
+      scaleY: null,
+      volume: 1,
+      muted: false,
+      hidden: false,
+    };
+    try {
+      const res = await fetch("/api/trigger/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          streamer: streamerSlug,
+          type: "TEXT",
+          text: content,
+          sticky: true,
+          x: 0.5,
+          y: 0.5,
+          scale: 0.04,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao adicionar texto");
+      }
+      setItems((prev) => [...prev, placed]);
+      setSelectedId(itemId);
+      setTextInput("");
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro");
+    }
+  }
+
   async function handleRemoveItem(itemId: string) {
     // Otimista: some da mesa na hora.
     setItems((prev) => prev.filter((p) => p.itemId !== itemId));
@@ -395,8 +448,9 @@ export function Mesa({
     const vert = handle.includes("t") || handle.includes("b");
 
     let startY = item.scaleY;
+    // Texto: tamanho uniforme (fonte), sem esticar — nao congela altura.
     // Congela a altura natural para poder ajustar largura/altura livremente.
-    if (startY == null) {
+    if (item.media.type !== "TEXT" && startY == null) {
       const rect = stageRef.current?.getBoundingClientRect();
       const boxH = boxEls.current.get(item.itemId)?.getBoundingClientRect().height;
       if (rect && boxH) {
@@ -426,6 +480,15 @@ export function Mesa({
 
     let nx = r.startX;
     let ny: number | null = r.startY;
+
+    // Texto: qualquer alça ajusta o tamanho (fonte) de forma uniforme.
+    if (it.media.type === "TEXT") {
+      const halfW = Math.abs(e.clientX - cx);
+      nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
+      const nextText = patchItem(r.itemId, { scaleX: nx, scaleY: null });
+      if (nextText) pushMove(nextText, commit);
+      return;
+    }
 
     if (r.isCorner) {
       const halfW = Math.abs(e.clientX - cx);
@@ -507,11 +570,11 @@ export function Mesa({
     <section className="panel-section">
       <h2>Mesa ao vivo</h2>
       <p>
-        Coloque <strong>quantas mídias quiser</strong> — elas ficam juntas na tela. Clique
-        numa para selecionar e <strong>arraste com o mouse</strong>. Para redimensionar:{" "}
-        <strong>cantos</strong> ajustam largura e altura, <strong>laterais</strong> só a
-        largura, <strong>topo/base</strong> só a altura. Cada mídia tem 👁 (ocultar) e ✕
-        (remover). O overlay do OBS acompanha em tempo real.
+        Coloque <strong>quantas mídias quiser</strong> (ou <strong>texto</strong>) — ficam
+        juntas na tela. Clique numa para selecionar e <strong>arraste com o mouse</strong>.
+        Para redimensionar: <strong>cantos</strong> ajustam largura e altura,{" "}
+        <strong>laterais</strong> só a largura, <strong>topo/base</strong> só a altura.
+        Cada item tem 👁 (ocultar) e ✕ (remover). O overlay do OBS acompanha em tempo real.
       </p>
 
       <div className="mesa-controls">
@@ -530,6 +593,25 @@ export function Mesa({
           disabled={!pickId || placing || !streamerSlug}
         >
           {placing ? "Colocando…" : "Colocar na mesa"}
+        </button>
+      </div>
+
+      <div className="mesa-controls">
+        <input
+          placeholder="Texto para a tela…"
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAddText();
+          }}
+          style={{ flex: "1 1 240px" }}
+        />
+        <button
+          className="primary"
+          onClick={handleAddText}
+          disabled={!textInput.trim() || !streamerSlug}
+        >
+          Adicionar texto
         </button>
       </div>
 
@@ -718,6 +800,41 @@ export function Mesa({
                   src={it.media.url}
                   autoPlay
                 />
+              </div>
+            );
+          }
+
+          if (it.media.type === "TEXT") {
+            return (
+              <div
+                key={it.itemId}
+                ref={(el) => {
+                  if (el) boxEls.current.set(it.itemId, el);
+                  else boxEls.current.delete(it.itemId);
+                }}
+                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                style={
+                  {
+                    left: `${it.x * 100}%`,
+                    top: `${it.y * 100}%`,
+                    transform: "translate(-50%, -50%)",
+                    "--s": it.scaleX,
+                  } as React.CSSProperties
+                }
+                onPointerDown={(e) => onItemPointerDown(e, it)}
+              >
+                {isSel && toolbar}
+                <span className="mesa-text">{it.text}</span>
+                {isSel &&
+                  HANDLES.map((h) => (
+                    <span
+                      key={h}
+                      className={`mesa-handle ${h}`}
+                      onPointerDown={(e) => onResizeDown(e, it, h)}
+                      onPointerMove={onResizeMove}
+                      onPointerUp={onResizeUp}
+                    />
+                  ))}
               </div>
             );
           }
