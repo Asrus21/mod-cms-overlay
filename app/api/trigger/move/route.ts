@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishMove } from "@/lib/realtime";
-import { modSlug } from "@/lib/accounts";
+import { modSlug, streamerSlug } from "@/lib/accounts";
 
 // POST /api/trigger/move — atualiza a posicao/escala/som de UM item na tela em
 // tempo real (mesa de controle). Chamada com alta frequencia enquanto o mod
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as {
     itemId?: string;
     mediaId?: string;
+    streamer?: string;
     x?: number;
     y?: number;
     scale?: number;
@@ -35,6 +36,10 @@ export async function POST(request: NextRequest) {
 
   if (!body?.itemId || typeof body.x !== "number" || typeof body.y !== "number") {
     return NextResponse.json({ error: "itemId, x e y sao obrigatorios" }, { status: 400 });
+  }
+  const streamer = streamerSlug(body.streamer || "");
+  if (!streamer) {
+    return NextResponse.json({ error: "streamer e obrigatorio" }, { status: 400 });
   }
 
   // scaleY nulo/ausente = altura natural (mantem a proporcao, sem distorcer).
@@ -49,7 +54,7 @@ export async function POST(request: NextRequest) {
   const hidden = typeof body.hidden === "boolean" ? body.hidden : undefined;
 
   try {
-    await publishMove(owner, {
+    await publishMove(streamer, {
       itemId: body.itemId,
       mediaId: body.mediaId || "",
       x,

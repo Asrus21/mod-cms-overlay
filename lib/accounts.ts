@@ -1,5 +1,9 @@
 import crypto from "crypto";
 
+// Re-exporta os helpers de slug (definidos sem crypto em lib/slug.ts, para o
+// cliente tambem poder usar).
+export { slugify, modSlug, streamerSlug } from "./slug";
+
 // Contas dos moderadores. Cada mod tem nome + senha proprios e uma "mesa"
 // isolada (canal/estado por mod). As contas vem SOMENTE da variavel de
 // ambiente MOD_ACCOUNTS (JSON) — nunca ficam senha no codigo/repositorio.
@@ -55,13 +59,3 @@ export function verifyMod(name: string, password: string): string | null {
   return null;
 }
 
-// "Slug" seguro do nome do mod, usado como id da sala/canal/estado. Nomes
-// simples (vitu, asrus, coelha) viram eles mesmos.
-export function modSlug(name: string): string {
-  const s = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return s || "mod";
-}

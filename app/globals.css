@@ -573,6 +573,34 @@ button:disabled {
   flex: 1 1 260px;
 }
 
+/* Sugestões de streamers (recentes) na busca. */
+.streamer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.streamer-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #2a2f3a;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.streamer-chip > button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.3rem 0.7rem;
+}
+
+.streamer-chip .streamer-chip-x {
+  padding: 0.3rem 0.5rem;
+  color: #9aa2b1;
+}
+
 /* Elemento posicionado pela mesa de controle. O tamanho e uma FRACAO da
    largura da tela (--s), entao a mesma proporcao vale na previa e no OBS
    (WYSIWYG). O centro da midia fica em (x,y) normalizados; a transicao curta

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Pusher from "pusher-js";
-import { overlayChannel } from "@/lib/realtime";
+import { streamerSlug } from "@/lib/slug";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
 import { Diagnostico } from "./Diagnostico";
@@ -49,12 +49,28 @@ export function PainelClient({
   twitchChannel: string;
 }) {
   const router = useRouter();
-  // URL do overlay DESTE mod para colar no OBS (montada no cliente para pegar
-  // o dominio atual).
-  const [overlayUrl, setOverlayUrl] = useState("");
+  // Streamer alvo: o overlay e por streamer (compartilhado). O mod escolhe/
+  // pesquisa o streamer; tudo o que ele colocar vai para o overlay desse
+  // streamer. Guardado no navegador (nome + slug) e a lista de recentes para
+  // sugestoes na busca.
+  const [streamer, setStreamer] = useState<{ slug: string; name: string } | null>(null);
+  const [recentStreamers, setRecentStreamers] = useState<{ slug: string; name: string }[]>([]);
+  const [streamerQuery, setStreamerQuery] = useState("");
+  const [origin, setOrigin] = useState("");
   useEffect(() => {
-    setOverlayUrl(`${window.location.origin}/overlay?mod=${encodeURIComponent(modSlug)}`);
-  }, [modSlug]);
+    setOrigin(window.location.origin);
+    try {
+      const s = JSON.parse(localStorage.getItem("streamers") || "[]");
+      if (Array.isArray(s)) setRecentStreamers(s);
+      const last = JSON.parse(localStorage.getItem("streamerAtual") || "null");
+      if (last && last.slug) setStreamer(last);
+    } catch {
+      // ignora
+    }
+  }, []);
+
+  const overlayUrl = streamer ? `${origin}/overlay/${streamer.slug}` : "";
+
   const [connectionState, setConnectionState] = useState<
     "connecting" | "connected" | "disconnected"
   >("connecting");
@@ -80,14 +96,38 @@ export function PainelClient({
       else setConnectionState("disconnected");
     });
 
-    const ch = overlayChannel(modSlug);
-    pusher.subscribe(ch);
-
     return () => {
-      pusher.unsubscribe(ch);
       pusher.disconnect();
     };
-  }, [modSlug]);
+  }, []);
+
+  // Seleciona/gera o streamer alvo (a partir do nome pesquisado). O slug e
+  // deterministico, entao o link do overlay nunca muda para o mesmo nome.
+  function selectStreamer(name: string) {
+    const trimmed = name.trim();
+    const slug = streamerSlug(trimmed);
+    if (!slug) return;
+    const entry = { slug, name: trimmed };
+    setStreamer(entry);
+    localStorage.setItem("streamerAtual", JSON.stringify(entry));
+    setRecentStreamers((prev) => {
+      const next = [entry, ...prev.filter((s) => s.slug !== slug)].slice(0, 12);
+      localStorage.setItem("streamers", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function forgetStreamer(slug: string) {
+    setRecentStreamers((prev) => {
+      const next = prev.filter((s) => s.slug !== slug);
+      localStorage.setItem("streamers", JSON.stringify(next));
+      return next;
+    });
+    if (streamer?.slug === slug) {
+      setStreamer(null);
+      localStorage.removeItem("streamerAtual");
+    }
+  }
 
   async function loadMedia() {
     const params = new URLSearchParams();
@@ -115,10 +155,11 @@ export function PainelClient({
   }, [query, typeFilter]);
 
   async function triggerShow(mediaId: string) {
+    if (!streamer) throw new Error("Escolha um streamer primeiro (campo Streamer).");
     const res = await fetch("/api/trigger/show", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId, durationMs: DEFAULT_DURATION_MS }),
+      body: JSON.stringify({ mediaId, streamer: streamer.slug, durationMs: DEFAULT_DURATION_MS }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -217,9 +258,17 @@ export function PainelClient({
   }
 
   async function handleClear() {
+    if (!streamer) {
+      alert("Escolha um streamer primeiro (campo Streamer).");
+      return;
+    }
     setClearing(true);
     try {
-      const res = await fetch("/api/trigger/clear", { method: "POST" });
+      const res = await fetch("/api/trigger/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamer: streamer.slug }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Falha ao limpar overlay");
@@ -311,23 +360,97 @@ export function PainelClient({
       <Diagnostico />
 
       <section className="panel-section">
-        <h2>Seu overlay (para o OBS)</h2>
+        <h2>Streamer</h2>
         <p>
-          Esta é a <strong>sua</strong> mesa: só o que <strong>você</strong> colocar
-          aparece neste overlay. Cole este link num <strong>Browser Source</strong> no
-          OBS. Cada mod tem o seu próprio link.
+          Escolha para qual <strong>streamer</strong> você vai trabalhar. Tudo o que
+          você colocar vai para o <strong>overlay desse streamer</strong> (compartilhado
+          entre os mods dele). O link do overlay é fixo — o streamer cola no OBS uma vez
+          e nunca muda.
         </p>
+
         <div className="overlay-link-row">
-          <input readOnly value={overlayUrl} onFocus={(e) => e.currentTarget.select()} />
-          <button className="primary" onClick={copyOverlayUrl}>
-            Copiar link
+          <input
+            placeholder="Nome do streamer…"
+            value={streamerQuery}
+            onChange={(e) => setStreamerQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && streamerQuery.trim()) {
+                selectStreamer(streamerQuery);
+                setStreamerQuery("");
+              }
+            }}
+          />
+          <button
+            className="primary"
+            disabled={!streamerQuery.trim()}
+            onClick={() => {
+              selectStreamer(streamerQuery);
+              setStreamerQuery("");
+            }}
+          >
+            Gerar link / usar
           </button>
         </div>
+
+        {/* Sugestoes (streamers ja usados neste navegador) que casam com a busca. */}
+        {recentStreamers.filter(
+          (s) =>
+            !streamerQuery.trim() ||
+            s.name.toLowerCase().includes(streamerQuery.trim().toLowerCase())
+        ).length > 0 && (
+          <div className="streamer-chips">
+            {recentStreamers
+              .filter(
+                (s) =>
+                  !streamerQuery.trim() ||
+                  s.name.toLowerCase().includes(streamerQuery.trim().toLowerCase())
+              )
+              .map((s) => (
+                <span key={s.slug} className="streamer-chip">
+                  <button
+                    className={streamer?.slug === s.slug ? "primary" : ""}
+                    onClick={() => selectStreamer(s.name)}
+                    title="Usar este streamer"
+                  >
+                    {s.name}
+                  </button>
+                  <button
+                    className="streamer-chip-x"
+                    onClick={() => forgetStreamer(s.slug)}
+                    title="Remover da lista"
+                    aria-label="Remover"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+          </div>
+        )}
+
+        {streamer ? (
+          <div style={{ marginTop: "0.75rem" }}>
+            <p style={{ margin: "0 0 0.4rem" }}>
+              Streamer atual: <strong>{streamer.name}</strong>. Link do overlay para o OBS:
+            </p>
+            <div className="overlay-link-row">
+              <input readOnly value={overlayUrl} onFocus={(e) => e.currentTarget.select()} />
+              <button className="primary" onClick={copyOverlayUrl}>
+                Copiar link
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mesa-bg-note" style={{ marginTop: "0.75rem" }}>
+            Nenhum streamer selecionado. Escolha um acima para poder colocar mídias.
+          </p>
+        )}
       </section>
 
       <Mesa
         media={media}
         modSlug={modSlug}
+        streamerSlug={streamer?.slug ?? ""}
+        streamerName={streamer?.name ?? ""}
         onAction={loadHistory}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}
