@@ -75,6 +75,7 @@ export function Mesa({
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const itemRef = useRef<HTMLDivElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastSentRef = useRef(0);
   const draggingRef = useRef(false);
   const resizeRef = useRef<ResizeState | null>(null);
@@ -87,6 +88,10 @@ export function Mesa({
   const [scaleX, setScaleX] = useState(0.3);
   const [scaleY, setScaleY] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
+  // Previa do video: comeca MUDA (o navegador so deixa dar autoplay se estiver
+  // muda, e evita estourar o audio no ouvido do mod ao posicionar). O botao
+  // 🔊 desmuta — o som "de verdade" toca no overlay do OBS.
+  const [previewMuted, setPreviewMuted] = useState(true);
   // Fundo de referencia: um print da cena do OBS carregado localmente, so
   // como guia visual para posicionar (nao vai para o overlay/servidor).
   const [bgUrl, setBgUrl] = useState<string | null>(null);
@@ -186,6 +191,7 @@ export function Mesa({
       setPlaced(item);
       setPos({ x: 0.5, y: 0.5 });
       setScaleY(null); // volta para altura natural ao colocar nova midia
+      setPreviewMuted(true); // previa sempre comeca muda
       onAction();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro");
@@ -327,6 +333,20 @@ export function Mesa({
     resizeRef.current = null;
   }
 
+  // Liga/desliga o som da PREVIA (o som "de verdade" toca no overlay do OBS).
+  // Desmutar exige um clique (gesto do usuario) — por isso e um botao.
+  function togglePreviewMute() {
+    setPreviewMuted((m) => {
+      const next = !m;
+      const v = videoRef.current;
+      if (v) {
+        v.muted = next;
+        if (!next) v.play().catch(() => {});
+      }
+      return next;
+    });
+  }
+
   // Tamanho mostrado (largura). Uma casa decimal quando muito pequeno.
   const sizeLabel = scaleX < 0.05 ? (scaleX * 100).toFixed(1) : Math.round(scaleX * 100);
 
@@ -442,6 +462,17 @@ export function Mesa({
         </label>
       )}
 
+      {placed?.type === "VIDEO" && (
+        <p className="mesa-bg-note" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <button onClick={togglePreviewMute}>
+            {previewMuted ? "🔊 Ouvir o som aqui" : "🔇 Silenciar prévia"}
+          </button>
+          <span>
+            A prévia começa muda; o som do vídeo toca no overlay do OBS (não aqui).
+          </span>
+        </p>
+      )}
+
       <div
         ref={stageRef}
         className="mesa-stage"
@@ -486,7 +517,15 @@ export function Mesa({
               onPointerDown={onPointerDown}
             >
               {placed.type === "VIDEO" ? (
-                <video src={placed.url} muted loop autoPlay playsInline draggable={false} />
+                <video
+                  ref={videoRef}
+                  src={placed.url}
+                  muted={previewMuted}
+                  loop
+                  autoPlay
+                  playsInline
+                  draggable={false}
+                />
               ) : (
                 <img src={placed.url} alt={placed.name} draggable={false} />
               )}
