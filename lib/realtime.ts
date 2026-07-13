@@ -17,20 +17,25 @@ export type ShowMediaPayload = {
   durationMs: number;
   triggeredAt: number;
   // Posicao/escala iniciais (normalizadas). x,y sao fracoes 0..1 do tamanho
-  // do overlay (centro da midia); scale e multiplicador. sticky = fica na
-  // tela ate um clear/novo show (nao some sozinho) — usado pela mesa.
+  // do overlay (centro da midia); scale = largura (fracao da largura da tela).
+  // scaleY = altura (fracao da altura da tela); ausente/nulo = altura natural
+  // (mantem a proporcao original, sem distorcer). sticky = fica na tela ate um
+  // clear/novo show (nao some sozinho) — usado pela mesa.
   x?: number;
   y?: number;
   scale?: number;
+  scaleY?: number | null;
   sticky?: boolean;
 };
 
 // Atualizacao de posicao/escala em tempo real enquanto o mod arrasta o mouse.
+// scaleY nulo/ausente = altura natural (proporcao original).
 export type MovePayload = {
   mediaId: string;
   x: number;
   y: number;
   scale: number;
+  scaleY?: number | null;
   triggeredAt: number;
 };
 

@@ -31,14 +31,33 @@ type Media = {
 // arrasta (throttle). ~55ms ≈ 18 updates/seg — suave sem inundar o Pusher.
 const MOVE_THROTTLE_MS = 55;
 
+// Limites do tamanho (fracao da tela). 0.005 = quase sumindo; 3 = 3x a tela.
+const MIN_SCALE = 0.005;
+const MAX_SCALE = 3;
+
 function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
 }
 
+// Alças de redimensionamento (estilo OBS): 4 cantos (proporcional) + 4 laterais
+// (largura OU altura). Ids de 2 letras = canto; de 1 letra = lateral.
+const HANDLES = ["tl", "tr", "bl", "br", "t", "b", "l", "r"] as const;
+type Handle = (typeof HANDLES)[number];
+
+type ResizeState = {
+  handle: Handle;
+  isCorner: boolean;
+  horiz: boolean;
+  vert: boolean;
+  startX: number;
+  startY: number | null;
+};
+
 // "Mesa ao vivo": o mod escolhe uma midia, ela vai para o overlay do OBS e
 // fica fixa (sticky). Arrastando com o mouse aqui na previa, a posicao e
-// espelhada em tempo real no overlay (evento media:move). A escala tem um
-// controle deslizante. Audio nao entra na mesa (nao tem posicao visual).
+// espelhada em tempo real no overlay (evento media:move). O tamanho tem um
+// slider e alças nos cantos/laterais. Audio nao tem posicao/tamanho: e apenas
+// tocado no overlay (indicador na mesa).
 type BgMode = "none" | "twitch" | "obs" | "ref";
 
 export function Mesa({
@@ -55,16 +74,18 @@ export function Mesa({
   twitchChannel: string;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const itemRef = useRef<HTMLDivElement | null>(null);
   const lastSentRef = useRef(0);
   const draggingRef = useRef(false);
-  const resizingRef = useRef(false);
+  const resizeRef = useRef<ResizeState | null>(null);
 
   const [selectedId, setSelectedId] = useState("");
   const [placed, setPlaced] = useState<Media | null>(null);
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
-  // scale = tamanho como FRACAO da largura da tela (0.05..1.5). Mesma
-  // proporcao vale na previa e no OBS (WYSIWYG).
-  const [scale, setScale] = useState(0.3);
+  // scaleX = largura (fracao da largura da tela). scaleY = altura (fracao da
+  // altura da tela); null = altura natural (mantem a proporcao, sem distorcer).
+  const [scaleX, setScaleX] = useState(0.3);
+  const [scaleY, setScaleY] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
   // Fundo de referencia: um print da cena do OBS carregado localmente, so
   // como guia visual para posicionar (nao vai para o overlay/servidor).
@@ -110,7 +131,10 @@ export function Mesa({
       )}&parent=${twitchParent}&muted=true&autoplay=true&controls=false`
     : "";
 
-  const placeable = media.filter((m) => m.type !== "AUDIO");
+  // Todos os tipos podem ir para a mesa. Audio nao tem posicao/tamanho: e so
+  // tocado no overlay (mostramos um indicador aqui).
+  const items = media;
+  const isAudio = placed?.type === "AUDIO";
 
   function onPickBackground(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -124,8 +148,10 @@ export function Mesa({
     setBgUrl(null);
   }
 
-  function sendMove(x: number, y: number, s: number, force = false) {
-    if (!placed) return;
+  // Envia posicao/tamanho ao servidor (repassado ao overlay). sy = null =>
+  // altura natural. Audio nao envia (nao tem posicao).
+  function sendMove(x: number, y: number, sx: number, sy: number | null, force = false) {
+    if (!placed || placed.type === "AUDIO") return;
     const now = Date.now();
     if (!force && now - lastSentRef.current < MOVE_THROTTLE_MS) return;
     lastSentRef.current = now;
@@ -133,19 +159,25 @@ export function Mesa({
     fetch("/api/trigger/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId: placed.id, x, y, scale: s }),
+      body: JSON.stringify({ mediaId: placed.id, x, y, scale: sx, scaleY: sy }),
     }).catch(() => {});
   }
 
   async function handlePlace() {
-    const item = placeable.find((m) => m.id === selectedId);
+    const item = items.find((m) => m.id === selectedId);
     if (!item) return;
     setPlacing(true);
     try {
+      // Audio: so toca (sticky), sem posicao/tamanho. Visual: comeca no centro
+      // com altura natural (scaleY ausente).
+      const payload =
+        item.type === "AUDIO"
+          ? { mediaId: item.id, sticky: true }
+          : { mediaId: item.id, sticky: true, x: 0.5, y: 0.5, scale: scaleX };
       const res = await fetch("/api/trigger/show", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaId: item.id, sticky: true, x: 0.5, y: 0.5, scale }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -153,6 +185,7 @@ export function Mesa({
       }
       setPlaced(item);
       setPos({ x: 0.5, y: 0.5 });
+      setScaleY(null); // volta para altura natural ao colocar nova midia
       onAction();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro");
@@ -180,13 +213,13 @@ export function Mesa({
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    if (!placed) return;
+    if (!placed || isAudio) return;
     draggingRef.current = true;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const c = coordsFromEvent(e);
     if (c) {
       setPos(c);
-      sendMove(c.x, c.y, scale, true);
+      sendMove(c.x, c.y, scaleX, scaleY, true);
     }
   }
 
@@ -195,7 +228,7 @@ export function Mesa({
     const c = coordsFromEvent(e);
     if (c) {
       setPos(c);
-      sendMove(c.x, c.y, scale);
+      sendMove(c.x, c.y, scaleX, scaleY);
     }
   }
 
@@ -205,65 +238,114 @@ export function Mesa({
     const c = coordsFromEvent(e);
     if (c) {
       setPos(c);
-      sendMove(c.x, c.y, scale, true); // garante a posicao final
+      sendMove(c.x, c.y, scaleX, scaleY, true); // garante a posicao final
     }
   }
 
   function onScaleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const s = Number(e.target.value);
-    setScale(s);
-    sendMove(pos.x, pos.y, s, true);
+    const newX = Number(e.target.value);
+    setScaleX(newX);
+    if (scaleY == null) {
+      sendMove(pos.x, pos.y, newX, null, true);
+    } else {
+      // mantem a proporcao atual: escala a altura pelo mesmo fator.
+      const factor = scaleX > 0 ? newX / scaleX : 1;
+      const newY = clamp(scaleY * factor, MIN_SCALE, MAX_SCALE);
+      setScaleY(newY);
+      sendMove(pos.x, pos.y, newX, newY, true);
+    }
   }
 
-  // Redimensionar arrastando uma alça de canto (estilo OBS). A largura passa
-  // a acompanhar a distancia horizontal do cursor ao centro da midia.
-  function scaleFromEvent(e: React.PointerEvent): number | null {
-    const rect = stageRef.current?.getBoundingClientRect();
-    if (!rect) return null;
-    const centerX = rect.left + pos.x * rect.width;
-    const halfW = Math.abs(e.clientX - centerX);
-    return clamp((2 * halfW) / rect.width, 0.005, 3);
-  }
-
-  function onResizeDown(e: React.PointerEvent) {
+  // --- Redimensionamento por alças (cantos = proporcional; laterais = 1 eixo) ---
+  function onResizeDown(e: React.PointerEvent, handle: Handle) {
     e.stopPropagation(); // nao inicia o arrasto de mover
-    resizingRef.current = true;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const isCorner = handle.length === 2;
+    const horiz = handle.includes("l") || handle.includes("r");
+    const vert = handle.includes("t") || handle.includes("b");
+
+    let startY = scaleY;
+    // Para esticar so um eixo a partir do estado "natural", congelamos a altura
+    // atual — senao mudar a largura mudaria a altura junto (proporcao travada).
+    if (startY == null && !isCorner) {
+      const rect = stageRef.current?.getBoundingClientRect();
+      const itemH = itemRef.current?.getBoundingClientRect().height;
+      if (rect && itemH) {
+        startY = clamp(itemH / rect.height, MIN_SCALE, MAX_SCALE);
+        setScaleY(startY);
+      }
+    }
+    resizeRef.current = { handle, isCorner, horiz, vert, startX: scaleX, startY };
+  }
+
+  function applyResize(e: React.PointerEvent, force: boolean) {
+    const r = resizeRef.current;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!r || !rect) return;
+    const cx = rect.left + pos.x * rect.width;
+    const cy = rect.top + pos.y * rect.height;
+
+    let nx = r.startX;
+    let ny: number | null = r.startY;
+
+    if (r.isCorner) {
+      // proporcional: usa a distancia horizontal para a largura e escala a
+      // altura pelo mesmo fator (mantem a proporcao atual da midia).
+      const halfW = Math.abs(e.clientX - cx);
+      nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
+      if (r.startY != null) {
+        const factor = r.startX > 0 ? nx / r.startX : 1;
+        ny = clamp(r.startY * factor, MIN_SCALE, MAX_SCALE);
+      } else {
+        ny = null; // segue com altura natural
+      }
+    } else if (r.horiz) {
+      // lateral esquerda/direita: so a largura.
+      const halfW = Math.abs(e.clientX - cx);
+      nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
+      ny = r.startY; // altura congelada no down
+    } else {
+      // topo/base: so a altura.
+      const halfH = Math.abs(e.clientY - cy);
+      ny = clamp((2 * halfH) / rect.height, MIN_SCALE, MAX_SCALE);
+      nx = r.startX;
+    }
+
+    setScaleX(nx);
+    setScaleY(ny);
+    sendMove(pos.x, pos.y, nx, ny, force);
   }
 
   function onResizeMove(e: React.PointerEvent) {
-    if (!resizingRef.current) return;
-    const s = scaleFromEvent(e);
-    if (s !== null) {
-      setScale(s);
-      sendMove(pos.x, pos.y, s);
-    }
+    if (!resizeRef.current) return;
+    applyResize(e, false);
   }
 
   function onResizeUp(e: React.PointerEvent) {
-    if (!resizingRef.current) return;
-    resizingRef.current = false;
-    const s = scaleFromEvent(e);
-    if (s !== null) {
-      setScale(s);
-      sendMove(pos.x, pos.y, s, true);
-    }
+    if (!resizeRef.current) return;
+    applyResize(e, true);
+    resizeRef.current = null;
   }
+
+  // Tamanho mostrado (largura). Uma casa decimal quando muito pequeno.
+  const sizeLabel = scaleX < 0.05 ? (scaleX * 100).toFixed(1) : Math.round(scaleX * 100);
 
   return (
     <section className="panel-section">
       <h2>Mesa ao vivo</h2>
       <p>
-        Coloque uma imagem/gif/vídeo na tela e <strong>arraste com o mouse</strong>{" "}
-        aqui embaixo. Para redimensionar, <strong>puxe as alças dos cantos</strong>{" "}
-        (ou use o slider). O overlay do OBS acompanha em tempo real.
+        Coloque uma imagem/gif/vídeo/áudio e <strong>arraste com o mouse</strong> aqui
+        embaixo. Para redimensionar: <strong>cantos</strong> mantêm a proporção,{" "}
+        <strong>laterais</strong> mudam só a largura e <strong>topo/base</strong> só a
+        altura (ou use o slider). O overlay do OBS acompanha em tempo real.
       </p>
 
       <div className="mesa-controls">
         <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
           <option value="">Escolha uma mídia…</option>
-          {placeable.map((m) => (
+          {items.map((m) => (
             <option key={m.id} value={m.id}>
+              {m.type === "AUDIO" ? "🔊 " : ""}
               {m.name}
             </option>
           ))}
@@ -345,20 +427,18 @@ export function Mesa({
         </p>
       )}
 
-      {placed && (
+      {placed && !isAudio && (
         <label className="mesa-scale">
           Tamanho
           <input
             type="range"
-            min={0.005}
+            min={MIN_SCALE}
             max={1.5}
-            step={0.005}
-            value={scale}
+            step={MIN_SCALE}
+            value={scaleX}
             onChange={onScaleChange}
           />
-          <span className="mesa-scale-value">
-            {scale < 0.05 ? (scale * 100).toFixed(1) : Math.round(scale * 100)}%
-          </span>
+          <span className="mesa-scale-value">{sizeLabel}%</span>
         </label>
       )}
 
@@ -384,31 +464,43 @@ export function Mesa({
           <StageBg src={twitchSrc} title="Transmissão da Twitch" />
         )}
         {placed ? (
-          <div
-            className="mesa-item"
-            style={{
-              left: `${pos.x * 100}%`,
-              top: `${pos.y * 100}%`,
-              width: `${scale * 100}%`,
-              transform: `translate(-50%, -50%)`,
-            }}
-            onPointerDown={onPointerDown}
-          >
-            {placed.type === "VIDEO" ? (
-              <video src={placed.url} muted loop autoPlay draggable={false} />
-            ) : (
-              <img src={placed.url} alt={placed.name} draggable={false} />
-            )}
-            {(["tl", "tr", "bl", "br"] as const).map((corner) => (
-              <span
-                key={corner}
-                className={`mesa-handle ${corner}`}
-                onPointerDown={onResizeDown}
-                onPointerMove={onResizeMove}
-                onPointerUp={onResizeUp}
-              />
-            ))}
-          </div>
+          isAudio ? (
+            <div className="mesa-audio-badge">
+              <span className="icon">🔊</span>
+              <div>
+                Tocando <strong>{placed.name}</strong> no overlay
+              </div>
+              <audio src={placed.url} controls autoPlay />
+            </div>
+          ) : (
+            <div
+              ref={itemRef}
+              className={`mesa-item${scaleY != null ? " stretched" : ""}`}
+              style={{
+                left: `${pos.x * 100}%`,
+                top: `${pos.y * 100}%`,
+                width: `${scaleX * 100}%`,
+                ...(scaleY != null ? { height: `${scaleY * 100}%` } : {}),
+                transform: `translate(-50%, -50%)`,
+              }}
+              onPointerDown={onPointerDown}
+            >
+              {placed.type === "VIDEO" ? (
+                <video src={placed.url} muted loop autoPlay playsInline draggable={false} />
+              ) : (
+                <img src={placed.url} alt={placed.name} draggable={false} />
+              )}
+              {HANDLES.map((h) => (
+                <span
+                  key={h}
+                  className={`mesa-handle ${h}`}
+                  onPointerDown={(e) => onResizeDown(e, h)}
+                  onPointerMove={onResizeMove}
+                  onPointerUp={onResizeUp}
+                />
+              ))}
+            </div>
+          )
         ) : (
           bgMode === "none" && (
             <span className="mesa-hint">Coloque uma mídia e arraste aqui</span>

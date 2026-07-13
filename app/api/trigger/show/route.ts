@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     x?: number;
     y?: number;
     scale?: number;
+    scaleY?: number | null;
   };
 
   if (!body.mediaId) {
@@ -57,6 +58,9 @@ export async function POST(request: NextRequest) {
   const x = clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1);
   const y = clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1);
   const scale = clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.005, 3);
+  // scaleY nulo/ausente = altura natural (mantem a proporcao, sem distorcer).
+  const scaleY =
+    typeof body.scaleY === "number" ? clamp(body.scaleY, 0.005, 3) : null;
 
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
@@ -70,6 +74,7 @@ export async function POST(request: NextRequest) {
       x,
       y,
       scale,
+      scaleY,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao publicar no overlay";
@@ -85,6 +90,7 @@ export async function POST(request: NextRequest) {
     x,
     y,
     scale,
+    scaleY,
     sticky,
     expiresAt: sticky ? null : new Date(Date.now() + durationMs),
   };

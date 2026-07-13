@@ -32,6 +32,7 @@ export async function GET() {
       x: s.x,
       y: s.y,
       scale: s.scale,
+      scaleY: s.scaleY ?? null,
       sticky: s.sticky,
     },
   });

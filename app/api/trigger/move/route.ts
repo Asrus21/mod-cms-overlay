@@ -21,11 +21,16 @@ export async function POST(request: NextRequest) {
     x?: number;
     y?: number;
     scale?: number;
+    scaleY?: number | null;
   } | null;
 
   if (!body?.mediaId || typeof body.x !== "number" || typeof body.y !== "number") {
     return NextResponse.json({ error: "mediaId, x e y sao obrigatorios" }, { status: 400 });
   }
+
+  // scaleY nulo/ausente = altura natural (mantem a proporcao, sem distorcer).
+  const scaleY =
+    typeof body.scaleY === "number" ? clamp(body.scaleY, 0.005, 3) : null;
 
   try {
     await publishMove({
@@ -33,6 +38,7 @@ export async function POST(request: NextRequest) {
       x: clamp(body.x, 0, 1),
       y: clamp(body.y, 0, 1),
       scale: clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.005, 3),
+      scaleY,
       triggeredAt: Date.now(),
     });
   } catch (err) {
