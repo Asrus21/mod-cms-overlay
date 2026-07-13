@@ -47,6 +47,7 @@ model Media {
 // reconecta/atualiza fica em branco ate o proximo disparo.
 model OverlayState {
   id        String     @id
+  owner     String     @default("") // mod dono deste item (mesa por mod)
   mediaId   String?
   url       String?
   type      MediaType?
@@ -60,6 +61,8 @@ model OverlayState {
   sticky    Boolean    @default(false)
   expiresAt DateTime? // para "flash" (nao-sticky): some sozinho depois disso
   updatedAt DateTime   @updatedAt
+
+  @@index([owner])
 }
 
 // Log de disparos (secao 2.5 / 7): auditoria de cada acao sensivel.

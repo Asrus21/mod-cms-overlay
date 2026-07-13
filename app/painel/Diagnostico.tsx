@@ -5,7 +5,7 @@ import { useState } from "react";
 type Health = {
   db: boolean;
   blob: boolean;
-  auth: { accessKey: boolean; sessionSecret: boolean };
+  auth: { accounts: boolean; sessionSecret: boolean };
   pusher: {
     appId: boolean;
     key: boolean;
@@ -76,9 +76,9 @@ export function Diagnostico() {
           hint: "PUSHER_CLUSTER e NEXT_PUBLIC_PUSHER_CLUSTER estão diferentes",
         },
         {
-          ok: health.auth.accessKey,
-          label: "Login · MOD_ACCESS_KEY",
-          hint: "senha do painel",
+          ok: health.auth.accounts,
+          label: "Login · contas dos mods",
+          hint: "MOD_ACCOUNTS (opcional; há lista padrão)",
         },
         {
           ok: health.auth.sessionSecret,

@@ -8,7 +8,16 @@ import Pusher from "pusher";
 //  - media:clear  -> limpa TODAS as midias
 // Cada midia colocada tem um `itemId` unico (varias instancias, sem limite;
 // ate a mesma midia pode aparecer mais de uma vez).
-export const OVERLAY_CHANNEL = "overlay";
+//
+// Cada mod tem a SUA mesa: um canal por mod (`overlay-<slug>`). O painel
+// publica no canal do proprio mod e o overlay do OBS assina o canal daquele
+// mod (via ?mod=<slug> na URL). Assim a mesa de um mod nao aparece na de outro.
+export const OVERLAY_CHANNEL_PREFIX = "overlay-";
+
+export function overlayChannel(owner: string): string {
+  return `${OVERLAY_CHANNEL_PREFIX}${owner}`;
+}
+
 export const EVENT_SHOW = "media:show";
 export const EVENT_MOVE = "media:move";
 export const EVENT_REMOVE = "media:remove";
@@ -98,9 +107,9 @@ function getPusherServer(): Pusher {
 // mensagem que inclui o CORPO da resposta do Pusher — que diz o motivo real —
 // mais uma dica. Um 400/401 com as 4 variaveis presentes costuma ser
 // credencial ERRADA: cluster diferente do app, ou secret/app_id trocados.
-async function safeTrigger(event: string, data: unknown) {
+async function safeTrigger(channel: string, event: string, data: unknown) {
   try {
-    await getPusherServer().trigger(OVERLAY_CHANNEL, event, data);
+    await getPusherServer().trigger(channel, event, data);
   } catch (err) {
     const e = err as { message?: string; status?: number; body?: unknown };
     const body =
@@ -118,18 +127,18 @@ async function safeTrigger(event: string, data: unknown) {
   }
 }
 
-export async function publishShowMedia(payload: ShowMediaPayload) {
-  await safeTrigger(EVENT_SHOW, payload);
+export async function publishShowMedia(owner: string, payload: ShowMediaPayload) {
+  await safeTrigger(overlayChannel(owner), EVENT_SHOW, payload);
 }
 
-export async function publishMove(payload: MovePayload) {
-  await safeTrigger(EVENT_MOVE, payload);
+export async function publishMove(owner: string, payload: MovePayload) {
+  await safeTrigger(overlayChannel(owner), EVENT_MOVE, payload);
 }
 
-export async function publishRemove(payload: RemovePayload) {
-  await safeTrigger(EVENT_REMOVE, payload);
+export async function publishRemove(owner: string, payload: RemovePayload) {
+  await safeTrigger(overlayChannel(owner), EVENT_REMOVE, payload);
 }
 
-export async function publishClear(payload: ClearPayload) {
-  await safeTrigger(EVENT_CLEAR, payload);
+export async function publishClear(owner: string, payload: ClearPayload) {
+  await safeTrigger(overlayChannel(owner), EVENT_CLEAR, payload);
 }

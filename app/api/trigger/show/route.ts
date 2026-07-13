@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishShowMedia } from "@/lib/realtime";
+import { modSlug } from "@/lib/accounts";
 import { ActionType } from "@prisma/client";
 
 const MIN_DURATION_MS = 1000;
@@ -47,6 +48,9 @@ export async function POST(request: NextRequest) {
       ? body.itemId
       : `it_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+  // Mesa isolada por mod: o dono e o mod logado.
+  const owner = modSlug(session.name);
+
   const sticky = Boolean(body.sticky);
   // No modo flash a duracao e obrigatoria e limitada; no sticky ela e ignorada.
   let durationMs = 0;
@@ -78,7 +82,7 @@ export async function POST(request: NextRequest) {
 
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
-    await publishShowMedia({
+    await publishShowMedia(owner, {
       itemId,
       mediaId: media.id,
       url: media.url,
@@ -102,6 +106,7 @@ export async function POST(request: NextRequest) {
 
   // Guarda o estado atual para o overlay recuperar ao (re)carregar no OBS.
   const stateData = {
+    owner,
     mediaId: media.id,
     url: media.url,
     type: media.type,

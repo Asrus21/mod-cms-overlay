@@ -7,7 +7,7 @@ import {
   EVENT_MOVE,
   EVENT_REMOVE,
   EVENT_SHOW,
-  OVERLAY_CHANNEL,
+  overlayChannel,
   type ClearPayload,
   type MovePayload,
   type RemovePayload,
@@ -37,6 +37,10 @@ type Item = {
 // podem coexistir na tela (sem limite), cada um com sua posicao/tamanho/som.
 export default function OverlayPage() {
   const [items, setItems] = useState<Item[]>([]);
+  // Qual mesa este overlay mostra: vem de ?mod=<slug> na URL (o painel gera o
+  // link certo). Sem mod, mostra so uma ajuda.
+  const [mod, setMod] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   // Elementos de midia (video/audio) por itemId, para aplicar volume/mudo via
   // propriedade do DOM (nao ha prop confiavel de "volume" no React).
   const mediaEls = useRef<Map<string, HTMLMediaElement>>(new Map());
@@ -70,10 +74,12 @@ export default function OverlayPage() {
   // Busca o estado atual no servidor (todos os itens). Chamado ao carregar e a
   // cada reconexao do Pusher, para o overlay recuperar o que esta na tela mesmo
   // tendo perdido eventos ao vivo (Pusher nao repete eventos).
-  async function syncState() {
+  async function syncState(owner: string) {
     const startedAt = Date.now();
     try {
-      const res = await fetch("/api/overlay/state", { cache: "no-store" });
+      const res = await fetch(`/api/overlay/state?mod=${encodeURIComponent(owner)}`, {
+        cache: "no-store",
+      });
       if (!res.ok) return;
       const { items: rows } = await res.json();
       // Se um evento ao vivo chegou durante o fetch, nao sobrescreve com o
@@ -94,8 +100,16 @@ export default function OverlayPage() {
     }
   }
 
+  // Lê o mod da URL (?mod=<slug>) uma vez, no cliente.
   useEffect(() => {
-    syncState();
+    const m = new URLSearchParams(window.location.search).get("mod")?.trim() || null;
+    setMod(m);
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mod) return;
+    syncState(mod);
 
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY || "", {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "us2",
@@ -103,10 +117,11 @@ export default function OverlayPage() {
 
     // Ao (re)conectar, re-sincroniza — cobre quedas de rede do browser source.
     pusher.connection.bind("connected", () => {
-      syncState();
+      syncState(mod);
     });
 
-    const channel = pusher.subscribe(OVERLAY_CHANNEL);
+    const channelName = overlayChannel(mod);
+    const channel = pusher.subscribe(channelName);
 
     channel.bind(EVENT_SHOW, (payload: ShowMediaPayload) => {
       const itemId = payload.itemId;
@@ -179,11 +194,12 @@ export default function OverlayPage() {
     });
 
     return () => {
-      pusher.unsubscribe(OVERLAY_CHANNEL);
+      pusher.unsubscribe(channelName);
       pusher.disconnect();
       for (const t of timeoutsRef.current.values()) clearTimeout(t);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mod]);
 
   // Aplica volume/mudo a cada elemento de midia sempre que os itens mudarem.
   useEffect(() => {
@@ -194,6 +210,22 @@ export default function OverlayPage() {
       el.muted = it.muted;
     }
   }, [items]);
+
+  // Sem ?mod= na URL: mostra uma ajuda (so aparece se aberto direto no
+  // navegador; no OBS a URL ja vem com o mod).
+  if (ready && !mod) {
+    return (
+      <div className="overlay-root overlay-help">
+        <div>
+          <p>Este overlay precisa saber de qual mod é a mesa.</p>
+          <p>
+            Use o link <code>/overlay?mod=SEU_NOME</code> (o painel mostra o link
+            certo para colar no OBS).
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overlay-root">

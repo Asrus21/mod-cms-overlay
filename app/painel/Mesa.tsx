@@ -69,12 +69,14 @@ type BgMode = "none" | "twitch" | "obs" | "ref";
 
 export function Mesa({
   media,
+  modSlug,
   onAction,
   vdoRoom,
   vdoPassword,
   twitchChannel,
 }: {
   media: Media[];
+  modSlug: string;
   onAction: () => void;
   vdoRoom: string;
   vdoPassword: string;
@@ -109,6 +111,56 @@ export function Mesa({
     const saved = localStorage.getItem("twitchChannel");
     if (saved) setTwitchCh(saved);
   }, []);
+
+  // Recupera os itens que ja estao na mesa deste mod (ao recarregar o painel),
+  // para o mod continuar de onde parou em vez de ver a mesa vazia.
+  const recoveredRef = useRef(false);
+  useEffect(() => {
+    if (recoveredRef.current) return;
+    recoveredRef.current = true;
+    fetch(`/api/overlay/state?mod=${encodeURIComponent(modSlug)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || !Array.isArray(data.items)) return;
+        type Row = {
+          itemId: string;
+          mediaId: string;
+          url: string;
+          type: MediaType;
+          x: number;
+          y: number;
+          scale: number;
+          scaleY: number | null;
+          volume?: number;
+          muted?: boolean;
+          hidden?: boolean;
+        };
+        const recovered: PlacedItem[] = (data.items as Row[]).map((row) => {
+          const found = media.find((m) => m.id === row.mediaId);
+          const mediaObj: Media = found ?? {
+            id: row.mediaId,
+            name: row.mediaId,
+            type: row.type,
+            url: row.url,
+            tags: [],
+          };
+          return {
+            itemId: row.itemId,
+            media: mediaObj,
+            x: row.x,
+            y: row.y,
+            scaleX: row.scale,
+            scaleY: typeof row.scaleY === "number" ? row.scaleY : null,
+            volume: typeof row.volume === "number" ? row.volume : 1,
+            muted: Boolean(row.muted),
+            hidden: Boolean(row.hidden),
+          };
+        });
+        if (recovered.length) setItems(recovered);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modSlug]);
 
   // Aplica volume/mudo/oculto aos elementos da previa sempre que os itens mudam.
   useEffect(() => {
