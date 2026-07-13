@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
   if (response) return response;
 
   const body = (await request.json()) as {
+    itemId?: string;
     mediaId?: string;
     durationMs?: number;
     sticky?: boolean;
@@ -38,6 +39,13 @@ export async function POST(request: NextRequest) {
   if (!body.mediaId) {
     return NextResponse.json({ error: "mediaId e obrigatorio" }, { status: 400 });
   }
+
+  // Cada exibicao e um "item" independente na mesa (varios coexistem). A mesa
+  // manda o seu itemId; o flash ("Mostrar") nao manda, entao geramos um.
+  const itemId =
+    typeof body.itemId === "string" && body.itemId
+      ? body.itemId
+      : `it_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   const sticky = Boolean(body.sticky);
   // No modo flash a duracao e obrigatoria e limitada; no sticky ela e ignorada.
@@ -71,6 +79,7 @@ export async function POST(request: NextRequest) {
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
     await publishShowMedia({
+      itemId,
       mediaId: media.id,
       url: media.url,
       type: media.type,
@@ -110,9 +119,9 @@ export async function POST(request: NextRequest) {
   // pegou), o disparo ja aconteceu; so perdemos a recuperacao de estado.
   try {
     await prisma.overlayState.upsert({
-      where: { id: "current" },
+      where: { id: itemId },
       update: stateData,
-      create: { id: "current", ...stateData },
+      create: { id: itemId, ...stateData },
     });
   } catch (err) {
     console.warn("[overlayState] upsert ignorado:", err instanceof Error ? err.message : err);
@@ -128,5 +137,5 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, itemId });
 }

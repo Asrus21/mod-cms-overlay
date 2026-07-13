@@ -2,15 +2,20 @@ import Pusher from "pusher";
 
 // Camada de tempo real (secao 2.4). Um unico canal por overlay/canal da
 // live, com eventos distintos para nao haver ambiguidade:
-//  - media:show  -> coloca/troca a midia na tela
-//  - media:move  -> atualiza posicao/escala em tempo real (mesa de controle)
-//  - media:clear -> limpa a tela
+//  - media:show   -> adiciona/atualiza UMA midia na tela (varias coexistem)
+//  - media:move   -> atualiza posicao/escala/som de UMA midia em tempo real
+//  - media:remove -> remove UMA midia da tela
+//  - media:clear  -> limpa TODAS as midias
+// Cada midia colocada tem um `itemId` unico (varias instancias, sem limite;
+// ate a mesma midia pode aparecer mais de uma vez).
 export const OVERLAY_CHANNEL = "overlay";
 export const EVENT_SHOW = "media:show";
 export const EVENT_MOVE = "media:move";
+export const EVENT_REMOVE = "media:remove";
 export const EVENT_CLEAR = "media:clear";
 
 export type ShowMediaPayload = {
+  itemId: string;
   mediaId: string;
   url: string;
   type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
@@ -37,6 +42,7 @@ export type ShowMediaPayload = {
 // Atualizacao de posicao/escala/som em tempo real enquanto o mod controla a
 // mesa. scaleY nulo/ausente = altura natural (proporcao original).
 export type MovePayload = {
+  itemId: string;
   mediaId: string;
   x: number;
   y: number;
@@ -45,6 +51,11 @@ export type MovePayload = {
   volume?: number;
   muted?: boolean;
   hidden?: boolean;
+  triggeredAt: number;
+};
+
+export type RemovePayload = {
+  itemId: string;
   triggeredAt: number;
 };
 
@@ -113,6 +124,10 @@ export async function publishShowMedia(payload: ShowMediaPayload) {
 
 export async function publishMove(payload: MovePayload) {
   await safeTrigger(EVENT_MOVE, payload);
+}
+
+export async function publishRemove(payload: RemovePayload) {
+  await safeTrigger(EVENT_REMOVE, payload);
 }
 
 export async function publishClear(payload: ClearPayload) {

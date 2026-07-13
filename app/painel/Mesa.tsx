@@ -1,11 +1,10 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
-// nao recarrega/pausa quando o resto da mesa re-renderiza (colocar/arrastar
-// midia dispara muitos re-renders).
+// nao recarrega/pausa quando o resto da mesa re-renderiza.
 const StageBg = memo(function StageBg({ src, title }: { src: string; title: string }) {
   return (
     <iframe
@@ -27,11 +26,21 @@ type Media = {
   tags: string[];
 };
 
-// Intervalo minimo entre updates de posicao enviados ao servidor enquanto
-// arrasta (throttle). ~55ms ≈ 18 updates/seg — suave sem inundar o Pusher.
-const MOVE_THROTTLE_MS = 55;
+// Um item colocado na mesa. Varios coexistem (sem limite); cada um tem seu
+// itemId, posicao, tamanho e som proprios.
+type PlacedItem = {
+  itemId: string;
+  media: Media;
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number | null; // null = altura natural (proporcao original)
+  volume: number;
+  muted: boolean;
+  hidden: boolean;
+};
 
-// Limites do tamanho (fracao da tela). 0.005 = quase sumindo; 3 = 3x a tela.
+const MOVE_THROTTLE_MS = 55;
 const MIN_SCALE = 0.005;
 const MAX_SCALE = 3;
 
@@ -39,12 +48,15 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
 }
 
-// Alças de redimensionamento (estilo OBS): 4 cantos (proporcional) + 4 laterais
-// (largura OU altura). Ids de 2 letras = canto; de 1 letra = lateral.
+function genId() {
+  return `it_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 const HANDLES = ["tl", "tr", "bl", "br", "t", "b", "l", "r"] as const;
 type Handle = (typeof HANDLES)[number];
 
 type ResizeState = {
+  itemId: string;
   handle: Handle;
   isCorner: boolean;
   horiz: boolean;
@@ -53,11 +65,6 @@ type ResizeState = {
   startY: number | null;
 };
 
-// "Mesa ao vivo": o mod escolhe uma midia, ela vai para o overlay do OBS e
-// fica fixa (sticky). Arrastando com o mouse aqui na previa, a posicao e
-// espelhada em tempo real no overlay (evento media:move). O tamanho tem um
-// slider e alças nos cantos/laterais. Audio nao tem posicao/tamanho: e apenas
-// tocado no overlay (indicador na mesa).
 type BgMode = "none" | "twitch" | "obs" | "ref";
 
 export function Mesa({
@@ -74,45 +81,46 @@ export function Mesa({
   twitchChannel: string;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const itemRef = useRef<HTMLDivElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSentRef = useRef(0);
-  const draggingRef = useRef(false);
+  const dragRef = useRef<{ itemId: string; ox: number; oy: number } | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
+  // Elementos de midia da previa (video/audio) por itemId, para aplicar
+  // volume/mudo e pausar quando oculto.
+  const mediaEls = useRef<Map<string, HTMLMediaElement>>(new Map());
+  // Caixas dos itens por itemId, para medir a altura natural ao redimensionar.
+  const boxEls = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const [selectedId, setSelectedId] = useState("");
-  const [placed, setPlaced] = useState<Media | null>(null);
-  const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
-  // scaleX = largura (fracao da largura da tela). scaleY = altura (fracao da
-  // altura da tela); null = altura natural (mantem a proporcao, sem distorcer).
-  const [scaleX, setScaleX] = useState(0.3);
-  const [scaleY, setScaleY] = useState<number | null>(null);
+  const [items, setItems] = useState<PlacedItem[]>([]);
+  // Espelho para os handlers de ponteiro lerem o estado atual sem "stale".
+  const itemsRef = useRef<PlacedItem[]>([]);
+  itemsRef.current = items;
+
+  // Item selecionado (recebe alças/toolbar e os controles de tamanho/som).
+  const [selectedId, setSelectedId] = useState<string>("");
+  // Midia escolhida no seletor para "Colocar na mesa".
+  const [pickId, setPickId] = useState("");
   const [placing, setPlacing] = useState(false);
-  // Som do audio/video: volume (0..1) e mudo. O MESMO valor e aplicado na previa
-  // do painel E enviado ao overlay do OBS, para o som ficar igual nos dois. O
-  // clique no ícone 🔊/🔇 muta/desmuta; o slider ajusta o volume.
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
-  // Oculto: a midia continua "na mesa" (posicao/tamanho preservados) mas nao
-  // aparece no overlay nem toca som. Botao 👁 alterna.
-  const [hidden, setHidden] = useState(false);
-  // Fundo de referencia: um print da cena do OBS carregado localmente, so
-  // como guia visual para posicionar (nao vai para o overlay/servidor).
+
   const [bgUrl, setBgUrl] = useState<string | null>(null);
-  // Modo do fundo da mesa (guia visual para posicionar):
-  //  - twitch: a propria transmissao da Twitch (nao exige abrir nada; ~seg de atraso)
-  //  - obs: a Camera Virtual do OBS via VDO.Ninja (tempo real; precisa transmitir)
-  //  - ref: um print estatico carregado localmente
   const [bgMode, setBgMode] = useState<BgMode>("none");
-  // Canal da Twitch: comeca com o valor do servidor (se houver) e pode ser
-  // digitado/editado aqui (nome de canal e publico), salvo no navegador.
   const [twitchCh, setTwitchCh] = useState(twitchChannel);
 
   useEffect(() => {
     const saved = localStorage.getItem("twitchChannel");
     if (saved) setTwitchCh(saved);
   }, []);
+
+  // Aplica volume/mudo/oculto aos elementos da previa sempre que os itens mudam.
+  useEffect(() => {
+    for (const it of items) {
+      const el = mediaEls.current.get(it.itemId);
+      if (!el) continue;
+      el.volume = it.volume;
+      el.muted = it.muted;
+      if (it.hidden) el.pause();
+      else el.play().catch(() => {});
+    }
+  }, [items]);
 
   function onTwitchChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value.trim();
@@ -133,7 +141,6 @@ export function Mesa({
   const liveConfigured = Boolean(vdoRoom);
   const cfg = { room: vdoRoom, password: vdoPassword };
 
-  // parent exigido pelo player da Twitch = dominio que hospeda o embed.
   const twitchParent = typeof window !== "undefined" ? window.location.hostname : "";
   const twitchSrc = twitchCh
     ? `https://player.twitch.tv/?channel=${encodeURIComponent(
@@ -141,10 +148,19 @@ export function Mesa({
       )}&parent=${twitchParent}&muted=true&autoplay=true&controls=false`
     : "";
 
-  // Todos os tipos podem ir para a mesa. Audio nao tem posicao/tamanho: e so
-  // tocado no overlay (mostramos um indicador aqui).
-  const items = media;
-  const isAudio = placed?.type === "AUDIO";
+  const selected = items.find((i) => i.itemId === selectedId) ?? null;
+
+  function getItem(itemId: string) {
+    return itemsRef.current.find((i) => i.itemId === itemId);
+  }
+
+  function patchItem(itemId: string, patch: Partial<PlacedItem>): PlacedItem | null {
+    const cur = getItem(itemId);
+    if (!cur) return null;
+    const next = { ...cur, ...patch };
+    setItems((prev) => prev.map((p) => (p.itemId === itemId ? next : p)));
+    return next;
+  }
 
   function onPickBackground(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -158,32 +174,55 @@ export function Mesa({
     setBgUrl(null);
   }
 
-  // Envia posicao/tamanho ao servidor (repassado ao overlay). sy = null =>
-  // altura natural. Audio nao envia (nao tem posicao).
-  function sendMove(x: number, y: number, sx: number, sy: number | null, force = false) {
-    if (!placed || placed.type === "AUDIO") return;
+  // Envia posicao/tamanho/som de um item ao overlay. commit = persiste no banco
+  // (fim de arrasto/toggle), para recuperar no OBS ao recarregar.
+  function pushMove(item: PlacedItem, commit: boolean) {
     const now = Date.now();
-    if (!force && now - lastSentRef.current < MOVE_THROTTLE_MS) return;
+    if (!commit && now - lastSentRef.current < MOVE_THROTTLE_MS) return;
     lastSentRef.current = now;
-    // fire-and-forget: nao bloqueia o arrasto esperando a resposta.
     fetch("/api/trigger/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId: placed.id, x, y, scale: sx, scaleY: sy }),
+      body: JSON.stringify({
+        itemId: item.itemId,
+        mediaId: item.media.id,
+        x: item.x,
+        y: item.y,
+        scale: item.scaleX,
+        scaleY: item.scaleY,
+        volume: item.volume,
+        muted: item.muted,
+        hidden: item.hidden,
+        commit,
+      }),
     }).catch(() => {});
   }
 
   async function handlePlace() {
-    const item = items.find((m) => m.id === selectedId);
+    const item = media.find((m) => m.id === pickId);
     if (!item) return;
     setPlacing(true);
+    const itemId = genId();
+    // Cascata leve para os itens nao empilharem exatamente no centro.
+    const k = items.length % 5;
+    const x = clamp(0.3 + k * 0.1, 0.1, 0.9);
+    const y = clamp(0.3 + (items.length % 3) * 0.12, 0.1, 0.9);
+    const placed: PlacedItem = {
+      itemId,
+      media: item,
+      x,
+      y,
+      scaleX: 0.3,
+      scaleY: null,
+      volume: 1,
+      muted: false,
+      hidden: false,
+    };
     try {
-      // Audio: so toca (sticky), sem posicao/tamanho. Visual: comeca no centro
-      // com altura natural (scaleY ausente).
       const payload =
         item.type === "AUDIO"
-          ? { mediaId: item.id, sticky: true, volume, muted }
-          : { mediaId: item.id, sticky: true, x: 0.5, y: 0.5, scale: scaleX, volume, muted };
+          ? { itemId, mediaId: item.id, sticky: true, volume: 1, muted: false }
+          : { itemId, mediaId: item.id, sticky: true, x, y, scale: 0.3, volume: 1, muted: false };
       const res = await fetch("/api/trigger/show", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,10 +232,8 @@ export function Mesa({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Falha ao colocar na mesa");
       }
-      setPlaced(item);
-      setPos({ x: 0.5, y: 0.5 });
-      setScaleY(null); // volta para altura natural ao colocar nova midia
-      setHidden(false); // nova midia entra visivel
+      setItems((prev) => [...prev, placed]);
+      setSelectedId(itemId);
       onAction();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro");
@@ -205,11 +242,19 @@ export function Mesa({
     }
   }
 
-  async function handleRemove() {
+  async function handleRemoveItem(itemId: string) {
+    // Otimista: some da mesa na hora.
+    setItems((prev) => prev.filter((p) => p.itemId !== itemId));
+    if (selectedId === itemId) setSelectedId("");
+    mediaEls.current.delete(itemId);
+    boxEls.current.delete(itemId);
     try {
-      await fetch("/api/trigger/clear", { method: "POST" });
+      await fetch("/api/trigger/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      });
     } finally {
-      setPlaced(null);
       onAction();
     }
   }
@@ -223,214 +268,188 @@ export function Mesa({
     };
   }
 
-  function onPointerDown(e: React.PointerEvent) {
-    if (!placed || isAudio) return;
-    draggingRef.current = true;
+  // --- Arrastar item ---
+  function onItemPointerDown(e: React.PointerEvent, item: PlacedItem) {
+    setSelectedId(item.itemId);
+    const c = coordsFromEvent(e);
+    if (!c) return;
+    dragRef.current = { itemId: item.itemId, ox: item.x - c.x, oy: item.y - c.y };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onStagePointerMove(e: React.PointerEvent) {
+    if (resizeRef.current) {
+      applyResize(e, false);
+      return;
+    }
+    const d = dragRef.current;
+    if (!d) return;
+    const c = coordsFromEvent(e);
+    if (!c) return;
+    const nx = clamp(c.x + d.ox, 0, 1);
+    const ny = clamp(c.y + d.oy, 0, 1);
+    const next = patchItem(d.itemId, { x: nx, y: ny });
+    if (next) pushMove(next, false);
+  }
+
+  function onStagePointerUp(e: React.PointerEvent) {
+    if (resizeRef.current) {
+      applyResize(e, true);
+      resizeRef.current = null;
+      return;
+    }
+    const d = dragRef.current;
+    if (!d) return;
+    dragRef.current = null;
+    const it = getItem(d.itemId);
+    if (it) pushMove(it, true);
+  }
+
+  // Clique no fundo vazio da mesa deseleciona (esconde alças/toolbar).
+  function onStagePointerDown(e: React.PointerEvent) {
+    if (e.target === stageRef.current) setSelectedId("");
+  }
+
+  // --- Redimensionar item selecionado ---
+  function onResizeDown(e: React.PointerEvent, item: PlacedItem, handle: Handle) {
+    e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const c = coordsFromEvent(e);
-    if (c) {
-      setPos(c);
-      sendMove(c.x, c.y, scaleX, scaleY, true);
-    }
-  }
-
-  function onPointerMove(e: React.PointerEvent) {
-    if (!draggingRef.current) return;
-    const c = coordsFromEvent(e);
-    if (c) {
-      setPos(c);
-      sendMove(c.x, c.y, scaleX, scaleY);
-    }
-  }
-
-  function onPointerUp(e: React.PointerEvent) {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    const c = coordsFromEvent(e);
-    if (c) {
-      setPos(c);
-      sendMove(c.x, c.y, scaleX, scaleY, true); // garante a posicao final
-    }
-  }
-
-  function onScaleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newX = Number(e.target.value);
-    setScaleX(newX);
-    if (scaleY == null) {
-      sendMove(pos.x, pos.y, newX, null, true);
-    } else {
-      // mantem a proporcao atual: escala a altura pelo mesmo fator.
-      const factor = scaleX > 0 ? newX / scaleX : 1;
-      const newY = clamp(scaleY * factor, MIN_SCALE, MAX_SCALE);
-      setScaleY(newY);
-      sendMove(pos.x, pos.y, newX, newY, true);
-    }
-  }
-
-  // --- Redimensionamento por alças (cantos = proporcional; laterais = 1 eixo) ---
-  function onResizeDown(e: React.PointerEvent, handle: Handle) {
-    e.stopPropagation(); // nao inicia o arrasto de mover
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setSelectedId(item.itemId);
     const isCorner = handle.length === 2;
     const horiz = handle.includes("l") || handle.includes("r");
     const vert = handle.includes("t") || handle.includes("b");
 
-    let startY = scaleY;
-    // Para ajustar a altura livremente (cantos e laterais topo/base) a partir
-    // do estado "natural", congelamos a altura atual — senao mudar a largura
-    // mudaria a altura junto (proporcao travada).
+    let startY = item.scaleY;
+    // Congela a altura natural para poder ajustar largura/altura livremente.
     if (startY == null) {
       const rect = stageRef.current?.getBoundingClientRect();
-      const itemH = itemRef.current?.getBoundingClientRect().height;
-      if (rect && itemH) {
-        startY = clamp(itemH / rect.height, MIN_SCALE, MAX_SCALE);
-        setScaleY(startY);
+      const boxH = boxEls.current.get(item.itemId)?.getBoundingClientRect().height;
+      if (rect && boxH) {
+        startY = clamp(boxH / rect.height, MIN_SCALE, MAX_SCALE);
+        patchItem(item.itemId, { scaleY: startY });
       }
     }
-    resizeRef.current = { handle, isCorner, horiz, vert, startX: scaleX, startY };
+    resizeRef.current = {
+      itemId: item.itemId,
+      handle,
+      isCorner,
+      horiz,
+      vert,
+      startX: item.scaleX,
+      startY,
+    };
   }
 
-  function applyResize(e: React.PointerEvent, force: boolean) {
+  function applyResize(e: React.PointerEvent, commit: boolean) {
     const r = resizeRef.current;
     const rect = stageRef.current?.getBoundingClientRect();
     if (!r || !rect) return;
-    const cx = rect.left + pos.x * rect.width;
-    const cy = rect.top + pos.y * rect.height;
+    const it = getItem(r.itemId);
+    if (!it) return;
+    const cx = rect.left + it.x * rect.width;
+    const cy = rect.top + it.y * rect.height;
 
     let nx = r.startX;
     let ny: number | null = r.startY;
 
     if (r.isCorner) {
-      // canto (diagonal): ajusta largura E altura de forma independente, cada
-      // uma seguindo a distancia do cursor ao centro no seu eixo.
       const halfW = Math.abs(e.clientX - cx);
       const halfH = Math.abs(e.clientY - cy);
       nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
       ny = clamp((2 * halfH) / rect.height, MIN_SCALE, MAX_SCALE);
     } else if (r.horiz) {
-      // lateral esquerda/direita: so a largura.
       const halfW = Math.abs(e.clientX - cx);
       nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
-      ny = r.startY; // altura congelada no down
+      ny = r.startY;
     } else {
-      // topo/base: so a altura.
       const halfH = Math.abs(e.clientY - cy);
       ny = clamp((2 * halfH) / rect.height, MIN_SCALE, MAX_SCALE);
       nx = r.startX;
     }
 
-    setScaleX(nx);
-    setScaleY(ny);
-    sendMove(pos.x, pos.y, nx, ny, force);
+    const next = patchItem(r.itemId, { scaleX: nx, scaleY: ny });
+    if (next) pushMove(next, commit);
   }
 
   function onResizeMove(e: React.PointerEvent) {
-    if (!resizeRef.current) return;
-    applyResize(e, false);
+    if (resizeRef.current) applyResize(e, false);
   }
-
   function onResizeUp(e: React.PointerEvent) {
     if (!resizeRef.current) return;
     applyResize(e, true);
     resizeRef.current = null;
   }
 
-  // Aplica volume/mudo/oculto na previa do painel (video ou audio). Quando
-  // oculto, pausa; senao toca respeitando volume/mudo.
-  const applyPreview = useCallback((vol: number, m: boolean, h: boolean) => {
-    const els = [videoRef.current, audioRef.current];
-    for (const el of els) {
-      if (!el) continue;
-      el.volume = vol;
-      el.muted = m;
-      if (h) el.pause();
-      else el.play().catch(() => {});
+  // --- Controles de tamanho/som do item selecionado ---
+  function onScaleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!selected) return;
+    const newX = Number(e.target.value);
+    let next: PlacedItem | null;
+    if (selected.scaleY == null) {
+      next = patchItem(selected.itemId, { scaleX: newX });
+    } else {
+      const factor = selected.scaleX > 0 ? newX / selected.scaleX : 1;
+      const newY = clamp(selected.scaleY * factor, MIN_SCALE, MAX_SCALE);
+      next = patchItem(selected.itemId, { scaleX: newX, scaleY: newY });
     }
-  }, []);
-
-  // Reaplica sempre que trocar a midia colocada ou alternar oculto.
-  useEffect(() => {
-    applyPreview(volume, muted, hidden);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed?.id, hidden]);
-
-  // Envia som/oculto ao overlay (aplica em tempo real no OBS). Funciona para
-  // audio e video; usa a posicao/tamanho atuais (irrelevantes para audio).
-  function sendControls(vol: number, m: boolean, h: boolean) {
-    if (!placed) return;
-    fetch("/api/trigger/move", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mediaId: placed.id,
-        x: pos.x,
-        y: pos.y,
-        scale: scaleX,
-        scaleY,
-        volume: vol,
-        muted: m,
-        hidden: h,
-      }),
-    }).catch(() => {});
+    if (next) pushMove(next, false);
+  }
+  function onScaleCommit() {
+    const it = getItem(selectedId);
+    if (it) pushMove(it, true);
   }
 
-  // Clique no ícone 🔊/🔇: muta/desmuta (painel + OBS). Ao desmutar com volume
-  // no zero, sobe para 100% para nao "desmutar" e continuar sem som.
   function toggleMuted() {
-    const next = !muted;
-    let vol = volume;
-    if (!next && vol === 0) {
+    if (!selected) return;
+    const nextMuted = !selected.muted;
+    let vol = selected.volume;
+    const patch: Partial<PlacedItem> = { muted: nextMuted };
+    if (!nextMuted && vol === 0) {
       vol = 1;
-      setVolume(1);
+      patch.volume = 1;
     }
-    setMuted(next);
-    applyPreview(vol, next, hidden);
-    sendControls(vol, next, hidden);
+    const next = patchItem(selected.itemId, patch);
+    if (next) pushMove(next, true);
   }
 
-  // Slider de volume: ajusta volume (painel + OBS). Volume 0 = mudo.
   function onVolumeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!selected) return;
     const vol = Number(e.target.value);
-    const m = vol === 0;
-    setVolume(vol);
-    setMuted(m);
-    applyPreview(vol, m, hidden);
-    sendControls(vol, m, hidden);
+    const next = patchItem(selected.itemId, { volume: vol, muted: vol === 0 });
+    if (next) pushMove(next, false);
+  }
+  function onVolumeCommit() {
+    const it = getItem(selectedId);
+    if (it) pushMove(it, true);
   }
 
-  // Botao 👁 na midia: oculta/reexibe no overlay (para o som e para de mostrar).
-  function toggleHidden() {
-    const next = !hidden;
-    setHidden(next);
-    applyPreview(volume, muted, next);
-    sendControls(volume, muted, next);
+  function toggleHidden(item: PlacedItem) {
+    const next = patchItem(item.itemId, { hidden: !item.hidden });
+    if (next) pushMove(next, true);
   }
-
-  // Tamanho mostrado (largura). Uma casa decimal quando muito pequeno.
-  const sizeLabel = scaleX < 0.05 ? (scaleX * 100).toFixed(1) : Math.round(scaleX * 100);
 
   return (
     <section className="panel-section">
       <h2>Mesa ao vivo</h2>
       <p>
-        Coloque uma imagem/gif/vídeo/áudio e <strong>arraste com o mouse</strong> aqui
-        embaixo. Para redimensionar: <strong>cantos</strong> ajustam largura e altura ao
-        mesmo tempo, <strong>laterais</strong> mudam só a largura e{" "}
-        <strong>topo/base</strong> só a altura (ou use o slider). O overlay do OBS
-        acompanha em tempo real.
+        Coloque <strong>quantas mídias quiser</strong> — elas ficam juntas na tela. Clique
+        numa para selecionar e <strong>arraste com o mouse</strong>. Para redimensionar:{" "}
+        <strong>cantos</strong> ajustam largura e altura, <strong>laterais</strong> só a
+        largura, <strong>topo/base</strong> só a altura. Cada mídia tem 👁 (ocultar) e ✕
+        (remover). O overlay do OBS acompanha em tempo real.
       </p>
 
       <div className="mesa-controls">
-        <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+        <select value={pickId} onChange={(e) => setPickId(e.target.value)}>
           <option value="">Escolha uma mídia…</option>
-          {items.map((m) => (
+          {media.map((m) => (
             <option key={m.id} value={m.id}>
               {m.type === "AUDIO" ? "🔊 " : ""}
               {m.name}
             </option>
           ))}
         </select>
-        <button className="primary" onClick={handlePlace} disabled={!selectedId || placing}>
+        <button className="primary" onClick={handlePlace} disabled={!pickId || placing}>
           {placing ? "Colocando…" : "Colocar na mesa"}
         </button>
       </div>
@@ -487,22 +506,17 @@ export function Mesa({
               <strong>tempo real</strong> — sem aba de navegador aberta.
             </li>
           </ol>
-          <p style={{ margin: "0.5rem 0 0", color: "#9aa2b1" }}>
-            Alternativa: use <strong>Abrir em aba</strong> (uma janela de navegador
-            comum, que precisa ficar aberta).
-          </p>
         </details>
       )}
       {bgMode === "twitch" && (
         <p className="mesa-bg-note">
           Digite o nome do seu canal acima. Usa a sua transmissão da Twitch como
           fundo — você não precisa abrir nada. Tem alguns segundos de atraso
-          (normal da Twitch), o que não atrapalha para posicionar. Só aparece com a
-          live no ar.
+          (normal da Twitch). Só aparece com a live no ar.
         </p>
       )}
 
-      {placed && !isAudio && (
+      {selected && selected.media.type !== "AUDIO" && (
         <label className="mesa-scale">
           Tamanho
           <input
@@ -510,33 +524,42 @@ export function Mesa({
             min={MIN_SCALE}
             max={1.5}
             step={MIN_SCALE}
-            value={scaleX}
+            value={selected.scaleX}
             onChange={onScaleChange}
+            onPointerUp={onScaleCommit}
           />
-          <span className="mesa-scale-value">{sizeLabel}%</span>
+          <span className="mesa-scale-value">
+            {selected.scaleX < 0.05
+              ? (selected.scaleX * 100).toFixed(1)
+              : Math.round(selected.scaleX * 100)}
+            %
+          </span>
         </label>
       )}
 
-      {placed && (placed.type === "VIDEO" || placed.type === "AUDIO") && (
+      {selected && (selected.media.type === "VIDEO" || selected.media.type === "AUDIO") && (
         <div className="mesa-audio-row">
           <button
             className="mesa-mute"
             onClick={toggleMuted}
-            title={muted ? "Desmutar" : "Mutar"}
-            aria-label={muted ? "Desmutar" : "Mutar"}
+            title={selected.muted ? "Desmutar" : "Mutar"}
+            aria-label={selected.muted ? "Desmutar" : "Mutar"}
           >
-            {muted ? "🔇" : "🔊"}
+            {selected.muted ? "🔇" : "🔊"}
           </button>
           <input
             type="range"
             min={0}
             max={1}
             step={0.05}
-            value={muted ? 0 : volume}
+            value={selected.muted ? 0 : selected.volume}
             onChange={onVolumeChange}
+            onPointerUp={onVolumeCommit}
             aria-label="Volume"
           />
-          <span className="mesa-scale-value">{Math.round((muted ? 0 : volume) * 100)}%</span>
+          <span className="mesa-scale-value">
+            {Math.round((selected.muted ? 0 : selected.volume) * 100)}%
+          </span>
           <span className="mesa-audio-note">som espelhado no OBS</span>
         </div>
       )}
@@ -553,8 +576,9 @@ export function Mesa({
               }
             : undefined
         }
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={onStagePointerUp}
       >
         {bgMode === "obs" && liveConfigured && (
           <StageBg src={buildObsViewUrl(cfg)} title="Tela do OBS ao vivo" />
@@ -562,81 +586,102 @@ export function Mesa({
         {bgMode === "twitch" && twitchCh && twitchParent && (
           <StageBg src={twitchSrc} title="Transmissão da Twitch" />
         )}
-        {placed ? (
-          isAudio ? (
-            <div className={`mesa-audio-badge${hidden ? " hidden" : ""}`}>
-              <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
-                <button
-                  onClick={toggleHidden}
-                  title={hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
-                  aria-label={hidden ? "Mostrar" : "Ocultar"}
-                >
-                  {hidden ? "🙈" : "👁"}
-                </button>
-                <button onClick={handleRemove} title="Remover da mesa" aria-label="Remover">
-                  ✕
-                </button>
-              </div>
-              <span className="icon">{hidden ? "🙈" : muted ? "🔇" : "🔊"}</span>
-              <div>
-                {hidden ? "Oculto" : "Tocando"} <strong>{placed.name}</strong>
-                {hidden ? " (sem som)" : " no overlay"}
-              </div>
-              <audio ref={audioRef} src={placed.url} autoPlay />
+
+        {items.map((it) => {
+          const isSel = it.itemId === selectedId;
+          const toolbar = (
+            <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => toggleHidden(it)}
+                title={it.hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
+                aria-label={it.hidden ? "Mostrar" : "Ocultar"}
+              >
+                {it.hidden ? "🙈" : "👁"}
+              </button>
+              <button
+                onClick={() => handleRemoveItem(it.itemId)}
+                title="Remover da mesa"
+                aria-label="Remover"
+              >
+                ✕
+              </button>
             </div>
-          ) : (
+          );
+
+          if (it.media.type === "AUDIO") {
+            return (
+              <div
+                key={it.itemId}
+                className={`mesa-audio-badge${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                style={{ left: `${it.x * 100}%`, top: `${it.y * 100}%`, transform: "translate(-50%, -50%)" }}
+                onPointerDown={(e) => onItemPointerDown(e, it)}
+              >
+                {isSel && toolbar}
+                <span className="icon">{it.hidden ? "🙈" : it.muted ? "🔇" : "🔊"}</span>
+                <div>
+                  {it.hidden ? "Oculto" : "Tocando"} <strong>{it.media.name}</strong>
+                </div>
+                <audio
+                  ref={(el) => {
+                    if (el) mediaEls.current.set(it.itemId, el);
+                    else mediaEls.current.delete(it.itemId);
+                  }}
+                  src={it.media.url}
+                  autoPlay
+                />
+              </div>
+            );
+          }
+
+          return (
             <div
-              ref={itemRef}
-              className={`mesa-item${scaleY != null ? " stretched" : ""}${hidden ? " hidden" : ""}`}
+              key={it.itemId}
+              ref={(el) => {
+                if (el) boxEls.current.set(it.itemId, el);
+                else boxEls.current.delete(it.itemId);
+              }}
+              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
               style={{
-                left: `${pos.x * 100}%`,
-                top: `${pos.y * 100}%`,
-                width: `${scaleX * 100}%`,
-                ...(scaleY != null ? { height: `${scaleY * 100}%` } : {}),
+                left: `${it.x * 100}%`,
+                top: `${it.y * 100}%`,
+                width: `${it.scaleX * 100}%`,
+                ...(it.scaleY != null ? { height: `${it.scaleY * 100}%` } : {}),
                 transform: `translate(-50%, -50%)`,
               }}
-              onPointerDown={onPointerDown}
+              onPointerDown={(e) => onItemPointerDown(e, it)}
             >
-              <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
-                <button
-                  onClick={toggleHidden}
-                  title={hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
-                  aria-label={hidden ? "Mostrar" : "Ocultar"}
-                >
-                  {hidden ? "🙈" : "👁"}
-                </button>
-                <button onClick={handleRemove} title="Remover da mesa" aria-label="Remover">
-                  ✕
-                </button>
-              </div>
-              {placed.type === "VIDEO" ? (
+              {isSel && toolbar}
+              {it.media.type === "VIDEO" ? (
                 <video
-                  ref={videoRef}
-                  src={placed.url}
-                  muted={muted}
+                  ref={(el) => {
+                    if (el) mediaEls.current.set(it.itemId, el);
+                    else mediaEls.current.delete(it.itemId);
+                  }}
+                  src={it.media.url}
                   loop
                   autoPlay
                   playsInline
                   draggable={false}
                 />
               ) : (
-                <img src={placed.url} alt={placed.name} draggable={false} />
+                <img src={it.media.url} alt={it.media.name} draggable={false} />
               )}
-              {HANDLES.map((h) => (
-                <span
-                  key={h}
-                  className={`mesa-handle ${h}`}
-                  onPointerDown={(e) => onResizeDown(e, h)}
-                  onPointerMove={onResizeMove}
-                  onPointerUp={onResizeUp}
-                />
-              ))}
+              {isSel &&
+                HANDLES.map((h) => (
+                  <span
+                    key={h}
+                    className={`mesa-handle ${h}`}
+                    onPointerDown={(e) => onResizeDown(e, it, h)}
+                    onPointerMove={onResizeMove}
+                    onPointerUp={onResizeUp}
+                  />
+                ))}
             </div>
-          )
-        ) : (
-          bgMode === "none" && (
-            <span className="mesa-hint">Coloque uma mídia e arraste aqui</span>
-          )
+          );
+        })}
+
+        {items.length === 0 && bgMode === "none" && (
+          <span className="mesa-hint">Coloque uma ou mais mídias e arraste aqui</span>
         )}
       </div>
     </section>
