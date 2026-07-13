@@ -30,6 +30,8 @@ export async function POST(request: NextRequest) {
     y?: number;
     scale?: number;
     scaleY?: number | null;
+    volume?: number;
+    muted?: boolean;
   };
 
   if (!body.mediaId) {
@@ -61,6 +63,8 @@ export async function POST(request: NextRequest) {
   // scaleY nulo/ausente = altura natural (mantem a proporcao, sem distorcer).
   const scaleY =
     typeof body.scaleY === "number" ? clamp(body.scaleY, 0.005, 3) : null;
+  const volume = typeof body.volume === "number" ? clamp(body.volume, 0, 1) : 1;
+  const muted = Boolean(body.muted);
 
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
@@ -75,6 +79,8 @@ export async function POST(request: NextRequest) {
       y,
       scale,
       scaleY,
+      volume,
+      muted,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao publicar no overlay";
@@ -91,6 +97,8 @@ export async function POST(request: NextRequest) {
     y,
     scale,
     scaleY,
+    volume,
+    muted,
     sticky,
     expiresAt: sticky ? null : new Date(Date.now() + durationMs),
   };
