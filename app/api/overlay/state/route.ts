@@ -38,13 +38,19 @@ export async function GET(request: NextRequest) {
   }
 
   const items = rows
-    .filter((r) => r.mediaId && r.url && !(r.expiresAt && r.expiresAt.getTime() < now))
+    .filter((r) => {
+      if (r.expiresAt && r.expiresAt.getTime() < now) return false;
+      // Item de texto nao tem midia/url; midia precisa de url.
+      if (r.type === "TEXT") return Boolean(r.text);
+      return Boolean(r.mediaId && r.url);
+    })
     .map((r) => ({
       itemId: r.id,
       owner: r.owner,
       mediaId: r.mediaId,
       url: r.url,
       type: r.type,
+      text: r.text ?? null,
       x: r.x,
       y: r.y,
       scale: r.scale,

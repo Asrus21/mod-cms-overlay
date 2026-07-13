@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     itemId?: string;
     mediaId?: string;
     streamer?: string;
+    type?: string;
+    text?: string;
     durationMs?: number;
     sticky?: boolean;
     x?: number;
@@ -38,7 +40,14 @@ export async function POST(request: NextRequest) {
     hidden?: boolean;
   };
 
-  if (!body.mediaId) {
+  // Item de texto: nao tem midia na biblioteca; carrega o texto direto.
+  const isText = body.type === "TEXT" || (!body.mediaId && typeof body.text === "string");
+  const text = typeof body.text === "string" ? body.text.slice(0, 500) : "";
+  if (isText) {
+    if (!text.trim()) {
+      return NextResponse.json({ error: "Digite um texto" }, { status: 400 });
+    }
+  } else if (!body.mediaId) {
     return NextResponse.json({ error: "mediaId e obrigatorio" }, { status: 400 });
   }
 
@@ -71,9 +80,23 @@ export async function POST(request: NextRequest) {
     durationMs = body.durationMs;
   }
 
-  const media = await prisma.media.findUnique({ where: { id: body.mediaId } });
-  if (!media) {
-    return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
+  // Resolve o conteudo do item: biblioteca (midia) ou texto.
+  let mediaId: string | null = null;
+  let url: string | null = null;
+  let mediaType: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
+  let mediaName: string;
+  if (isText) {
+    mediaType = "TEXT";
+    mediaName = text.slice(0, 40);
+  } else {
+    const media = await prisma.media.findUnique({ where: { id: body.mediaId } });
+    if (!media) {
+      return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
+    }
+    mediaId = media.id;
+    url = media.url;
+    mediaType = media.type;
+    mediaName = media.name;
   }
 
   // Posicao (0..1) e tamanho (fracao da largura da tela, 0.02..3).
@@ -92,9 +115,10 @@ export async function POST(request: NextRequest) {
     await publishShowMedia(streamer, {
       itemId,
       owner,
-      mediaId: media.id,
-      url: media.url,
-      type: media.type,
+      mediaId: mediaId ?? "",
+      url: url ?? "",
+      type: mediaType,
+      text: isText ? text : undefined,
       durationMs,
       triggeredAt: Date.now(),
       sticky,
@@ -116,9 +140,10 @@ export async function POST(request: NextRequest) {
   const stateData = {
     streamer,
     owner,
-    mediaId: media.id,
-    url: media.url,
-    type: media.type,
+    mediaId,
+    url,
+    type: mediaType,
+    text: isText ? text : null,
     x,
     y,
     scale,
@@ -145,8 +170,8 @@ export async function POST(request: NextRequest) {
     data: {
       action: ActionType.SHOW,
       actor: session.name,
-      mediaId: media.id,
-      mediaName: media.name,
+      mediaId,
+      mediaName,
       durationMs: sticky ? null : durationMs,
     },
   });

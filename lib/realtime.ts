@@ -30,7 +30,8 @@ export type ShowMediaPayload = {
   owner: string; // mod que colocou (para mesa por mod e clear por mod)
   mediaId: string;
   url: string;
-  type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
+  type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
+  text?: string; // conteudo quando type = TEXT
   durationMs: number;
   triggeredAt: number;
   // Posicao/escala iniciais (normalizadas). x,y sao fracoes 0..1 do tamanho

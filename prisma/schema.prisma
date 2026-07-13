@@ -17,6 +17,7 @@ enum MediaType {
   GIF
   VIDEO
   AUDIO
+  TEXT
 }
 
 enum ActionType {
@@ -51,6 +52,7 @@ model OverlayState {
   owner     String     @default("") // mod que colocou o item (mesa individual por mod)
   mediaId   String?
   url       String?
+  text      String? // conteudo do item de texto (type = TEXT)
   type      MediaType?
   x         Float      @default(0.5)
   y         Float      @default(0.5)

@@ -259,6 +259,7 @@ a {
    dentro dela e a posição é espelhada no OBS. */
 .mesa-stage {
   position: relative;
+  container-type: inline-size; /* para o texto escalar com a largura do palco (cqw) */
   width: 100%;
   aspect-ratio: 16 / 9;
   border: 1px solid #2a2f3a;
@@ -543,11 +544,36 @@ button:disabled {
 
 .overlay-root {
   margin: 0;
+  container-type: inline-size; /* para o texto escalar com a largura da tela (cqw) */
   width: 100vw;
   height: 100vh;
   background: transparent;
   overflow: hidden;
   position: relative;
+}
+
+/* Item de texto: largura pelo conteudo; tamanho da fonte proporcional a largura
+   do container (mesa ou overlay), controlado pelo mesmo --s do slider. */
+.overlay-movable.text-item,
+.mesa-item.text-item {
+  width: auto;
+}
+
+.overlay-text,
+.mesa-text {
+  display: block;
+  margin: 0;
+  font-size: calc(var(--s, 0.04) * 100cqw);
+  line-height: 1.1;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 92cqw;
+  /* contorno escuro para ler em qualquer fundo */
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
 }
 
 .overlay-help {
