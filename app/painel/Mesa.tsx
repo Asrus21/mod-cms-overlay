@@ -333,7 +333,9 @@ export function Mesa({
             )}
           </div>
         ) : (
-          <span className="mesa-hint">A prévia da tela aparece aqui</span>
+          bgMode === "none" && (
+            <span className="mesa-hint">Coloque uma mídia e arraste aqui</span>
+          )
         )}
       </div>
     </section>
