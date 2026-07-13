@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     scaleY?: number | null;
     volume?: number;
     muted?: boolean;
+    hidden?: boolean;
   } | null;
 
   if (!body?.mediaId || typeof body.x !== "number" || typeof body.y !== "number") {
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
     typeof body.scaleY === "number" ? clamp(body.scaleY, 0.005, 3) : null;
   const volume = typeof body.volume === "number" ? clamp(body.volume, 0, 1) : 1;
   const muted = Boolean(body.muted);
+  // hidden so e enviado quando muda (toggle); undefined = mantem o estado atual.
+  const hidden = typeof body.hidden === "boolean" ? body.hidden : undefined;
 
   try {
     await publishMove({
@@ -45,6 +48,7 @@ export async function POST(request: NextRequest) {
       scaleY,
       volume,
       muted,
+      hidden,
       triggeredAt: Date.now(),
     });
   } catch (err) {

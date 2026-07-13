@@ -21,6 +21,7 @@ type Placed = {
   scaleY: number | null;
   volume: number;
   muted: boolean;
+  hidden: boolean;
 };
 
 // Pagina "tela em branco" carregada como Browser Source no OBS (secao 2.2).
@@ -75,6 +76,7 @@ export default function OverlayPage() {
         scaleY: state.scaleY ?? null,
         volume: typeof state.volume === "number" ? state.volume : 1,
         muted: Boolean(state.muted),
+        hidden: Boolean(state.hidden),
       });
     } catch {
       // silencioso; o Pusher ainda pode entregar ao vivo.
@@ -111,6 +113,7 @@ export default function OverlayPage() {
         scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
         volume: typeof payload.volume === "number" ? payload.volume : 1,
         muted: Boolean(payload.muted),
+        hidden: Boolean(payload.hidden),
       });
 
       // sticky (mesa) nao some sozinho; flash some depois de durationMs.
@@ -133,6 +136,7 @@ export default function OverlayPage() {
               scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
               volume: typeof payload.volume === "number" ? payload.volume : prev.volume,
               muted: typeof payload.muted === "boolean" ? payload.muted : prev.muted,
+              hidden: typeof payload.hidden === "boolean" ? payload.hidden : prev.hidden,
             }
           : prev
       );
@@ -157,9 +161,18 @@ export default function OverlayPage() {
     if (!el) return;
     el.volume = placed ? placed.volume : 1;
     el.muted = placed ? placed.muted : false;
-  }, [placed?.volume, placed?.muted, placed?.media.triggeredAt, placed?.media.type]);
+    // placed?.hidden na dependencia: ao reexibir, o elemento remonta e precisa
+    // reaplicar volume/mudo.
+  }, [
+    placed?.volume,
+    placed?.muted,
+    placed?.hidden,
+    placed?.media.triggeredAt,
+    placed?.media.type,
+  ]);
 
-  if (!placed) return <div className="overlay-root" />;
+  // Oculto: nao renderiza a midia (o elemento desmonta -> para o som tambem).
+  if (!placed || placed.hidden) return <div className="overlay-root" />;
 
   // Posiciona pelo centro da midia via transform (suave e performatico).
   // A pequena transicao interpola entre as atualizacoes de rede, deixando o

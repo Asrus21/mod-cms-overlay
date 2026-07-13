@@ -28,6 +28,9 @@ export type ShowMediaPayload = {
   // volume do audio/video (0..1) e mudo — refletidos no overlay do OBS.
   volume?: number;
   muted?: boolean;
+  // oculto: nao mostra a midia no overlay nem toca o som (fica "guardada" na
+  // mesa, pode ser reexibida).
+  hidden?: boolean;
   sticky?: boolean;
 };
 
@@ -41,6 +44,7 @@ export type MovePayload = {
   scaleY?: number | null;
   volume?: number;
   muted?: boolean;
+  hidden?: boolean;
   triggeredAt: number;
 };
 

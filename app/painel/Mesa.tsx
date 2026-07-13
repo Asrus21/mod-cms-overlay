@@ -94,6 +94,9 @@ export function Mesa({
   // clique no ícone 🔊/🔇 muta/desmuta; o slider ajusta o volume.
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  // Oculto: a midia continua "na mesa" (posicao/tamanho preservados) mas nao
+  // aparece no overlay nem toca som. Botao 👁 alterna.
+  const [hidden, setHidden] = useState(false);
   // Fundo de referencia: um print da cena do OBS carregado localmente, so
   // como guia visual para posicionar (nao vai para o overlay/servidor).
   const [bgUrl, setBgUrl] = useState<string | null>(null);
@@ -193,6 +196,7 @@ export function Mesa({
       setPlaced(item);
       setPos({ x: 0.5, y: 0.5 });
       setScaleY(null); // volta para altura natural ao colocar nova midia
+      setHidden(false); // nova midia entra visivel
       onAction();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro");
@@ -331,26 +335,28 @@ export function Mesa({
     resizeRef.current = null;
   }
 
-  // Aplica volume/mudo na previa do painel (video ou audio) imediatamente.
-  const applyPreview = useCallback((vol: number, m: boolean) => {
+  // Aplica volume/mudo/oculto na previa do painel (video ou audio). Quando
+  // oculto, pausa; senao toca respeitando volume/mudo.
+  const applyPreview = useCallback((vol: number, m: boolean, h: boolean) => {
     const els = [videoRef.current, audioRef.current];
     for (const el of els) {
       if (!el) continue;
       el.volume = vol;
       el.muted = m;
-      if (!m) el.play().catch(() => {});
+      if (h) el.pause();
+      else el.play().catch(() => {});
     }
   }, []);
 
-  // Reaplica sempre que trocar a midia colocada (o elemento e recriado).
+  // Reaplica sempre que trocar a midia colocada ou alternar oculto.
   useEffect(() => {
-    applyPreview(volume, muted);
+    applyPreview(volume, muted, hidden);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed?.id]);
+  }, [placed?.id, hidden]);
 
-  // Envia volume/mudo ao overlay (aplica em tempo real no OBS). Funciona para
+  // Envia som/oculto ao overlay (aplica em tempo real no OBS). Funciona para
   // audio e video; usa a posicao/tamanho atuais (irrelevantes para audio).
-  function sendAudioState(vol: number, m: boolean) {
+  function sendControls(vol: number, m: boolean, h: boolean) {
     if (!placed) return;
     fetch("/api/trigger/move", {
       method: "POST",
@@ -363,6 +369,7 @@ export function Mesa({
         scaleY,
         volume: vol,
         muted: m,
+        hidden: h,
       }),
     }).catch(() => {});
   }
@@ -377,8 +384,8 @@ export function Mesa({
       setVolume(1);
     }
     setMuted(next);
-    applyPreview(vol, next);
-    sendAudioState(vol, next);
+    applyPreview(vol, next, hidden);
+    sendControls(vol, next, hidden);
   }
 
   // Slider de volume: ajusta volume (painel + OBS). Volume 0 = mudo.
@@ -387,8 +394,16 @@ export function Mesa({
     const m = vol === 0;
     setVolume(vol);
     setMuted(m);
-    applyPreview(vol, m);
-    sendAudioState(vol, m);
+    applyPreview(vol, m, hidden);
+    sendControls(vol, m, hidden);
+  }
+
+  // Botao 👁 na midia: oculta/reexibe no overlay (para o som e para de mostrar).
+  function toggleHidden() {
+    const next = !hidden;
+    setHidden(next);
+    applyPreview(volume, muted, next);
+    sendControls(volume, muted, next);
   }
 
   // Tamanho mostrado (largura). Uma casa decimal quando muito pequeno.
@@ -418,11 +433,6 @@ export function Mesa({
         <button className="primary" onClick={handlePlace} disabled={!selectedId || placing}>
           {placing ? "Colocando…" : "Colocar na mesa"}
         </button>
-        {placed && (
-          <button className="danger" onClick={handleRemove}>
-            Tirar da mesa
-          </button>
-        )}
       </div>
 
       <div className="mesa-bg-row">
@@ -554,17 +564,30 @@ export function Mesa({
         )}
         {placed ? (
           isAudio ? (
-            <div className="mesa-audio-badge">
-              <span className="icon">{muted ? "🔇" : "🔊"}</span>
+            <div className={`mesa-audio-badge${hidden ? " hidden" : ""}`}>
+              <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
+                <button
+                  onClick={toggleHidden}
+                  title={hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
+                  aria-label={hidden ? "Mostrar" : "Ocultar"}
+                >
+                  {hidden ? "🙈" : "👁"}
+                </button>
+                <button onClick={handleRemove} title="Remover da mesa" aria-label="Remover">
+                  ✕
+                </button>
+              </div>
+              <span className="icon">{hidden ? "🙈" : muted ? "🔇" : "🔊"}</span>
               <div>
-                Tocando <strong>{placed.name}</strong> no overlay
+                {hidden ? "Oculto" : "Tocando"} <strong>{placed.name}</strong>
+                {hidden ? " (sem som)" : " no overlay"}
               </div>
               <audio ref={audioRef} src={placed.url} autoPlay />
             </div>
           ) : (
             <div
               ref={itemRef}
-              className={`mesa-item${scaleY != null ? " stretched" : ""}`}
+              className={`mesa-item${scaleY != null ? " stretched" : ""}${hidden ? " hidden" : ""}`}
               style={{
                 left: `${pos.x * 100}%`,
                 top: `${pos.y * 100}%`,
@@ -574,6 +597,18 @@ export function Mesa({
               }}
               onPointerDown={onPointerDown}
             >
+              <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
+                <button
+                  onClick={toggleHidden}
+                  title={hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
+                  aria-label={hidden ? "Mostrar" : "Ocultar"}
+                >
+                  {hidden ? "🙈" : "👁"}
+                </button>
+                <button onClick={handleRemove} title="Remover da mesa" aria-label="Remover">
+                  ✕
+                </button>
+              </div>
               {placed.type === "VIDEO" ? (
                 <video
                   ref={videoRef}

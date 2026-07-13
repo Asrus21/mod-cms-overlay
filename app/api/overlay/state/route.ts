@@ -35,6 +35,7 @@ export async function GET() {
       scaleY: s.scaleY ?? null,
       volume: s.volume ?? 1,
       muted: s.muted ?? false,
+      hidden: s.hidden ?? false,
       sticky: s.sticky,
     },
   });
