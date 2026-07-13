@@ -272,9 +272,10 @@ export function Mesa({
     const vert = handle.includes("t") || handle.includes("b");
 
     let startY = scaleY;
-    // Para esticar so um eixo a partir do estado "natural", congelamos a altura
-    // atual — senao mudar a largura mudaria a altura junto (proporcao travada).
-    if (startY == null && !isCorner) {
+    // Para ajustar a altura livremente (cantos e laterais topo/base) a partir
+    // do estado "natural", congelamos a altura atual — senao mudar a largura
+    // mudaria a altura junto (proporcao travada).
+    if (startY == null) {
       const rect = stageRef.current?.getBoundingClientRect();
       const itemH = itemRef.current?.getBoundingClientRect().height;
       if (rect && itemH) {
@@ -296,16 +297,12 @@ export function Mesa({
     let ny: number | null = r.startY;
 
     if (r.isCorner) {
-      // proporcional: usa a distancia horizontal para a largura e escala a
-      // altura pelo mesmo fator (mantem a proporcao atual da midia).
+      // canto (diagonal): ajusta largura E altura de forma independente, cada
+      // uma seguindo a distancia do cursor ao centro no seu eixo.
       const halfW = Math.abs(e.clientX - cx);
+      const halfH = Math.abs(e.clientY - cy);
       nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
-      if (r.startY != null) {
-        const factor = r.startX > 0 ? nx / r.startX : 1;
-        ny = clamp(r.startY * factor, MIN_SCALE, MAX_SCALE);
-      } else {
-        ny = null; // segue com altura natural
-      }
+      ny = clamp((2 * halfH) / rect.height, MIN_SCALE, MAX_SCALE);
     } else if (r.horiz) {
       // lateral esquerda/direita: so a largura.
       const halfW = Math.abs(e.clientX - cx);
@@ -402,9 +399,10 @@ export function Mesa({
       <h2>Mesa ao vivo</h2>
       <p>
         Coloque uma imagem/gif/vídeo/áudio e <strong>arraste com o mouse</strong> aqui
-        embaixo. Para redimensionar: <strong>cantos</strong> mantêm a proporção,{" "}
-        <strong>laterais</strong> mudam só a largura e <strong>topo/base</strong> só a
-        altura (ou use o slider). O overlay do OBS acompanha em tempo real.
+        embaixo. Para redimensionar: <strong>cantos</strong> ajustam largura e altura ao
+        mesmo tempo, <strong>laterais</strong> mudam só a largura e{" "}
+        <strong>topo/base</strong> só a altura (ou use o slider). O overlay do OBS
+        acompanha em tempo real.
       </p>
 
       <div className="mesa-controls">
