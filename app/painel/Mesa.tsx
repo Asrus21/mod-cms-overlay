@@ -74,6 +74,16 @@ export function Mesa({
     localStorage.setItem("twitchChannel", v);
   }
 
+  async function copyObsUrl() {
+    const url = buildObsPushUrl({ room: vdoRoom, password: vdoPassword });
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("Link copiado! Cole num Dock de navegador no OBS (Exibir → Docks).");
+    } catch {
+      alert(url);
+    }
+  }
+
   const liveConfigured = Boolean(vdoRoom);
   const cfg = { room: vdoRoom, password: vdoPassword };
 
@@ -235,9 +245,12 @@ export function Mesa({
           </label>
         )}
         {bgMode === "obs" && liveConfigured && (
-          <button onClick={() => window.open(buildObsPushUrl(cfg), "_blank", "noopener")}>
-            📺 Transmitir a tela do OBS
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button onClick={copyObsUrl}>📋 Copiar link (para o Dock do OBS)</button>
+            <button onClick={() => window.open(buildObsPushUrl(cfg), "_blank", "noopener")}>
+              Abrir em aba
+            </button>
+          </div>
         )}
         {bgMode === "ref" && (
           <>
@@ -249,15 +262,27 @@ export function Mesa({
 
       {bgMode === "obs" && liveConfigured && (
         <details className="obs-help">
-          <summary>Como transmitir a tela do OBS (streamer, uma vez)</summary>
+          <summary>Como ter a tela do OBS ao vivo (tempo real, dentro do OBS)</summary>
           <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
             <li>No OBS, clique em <strong>Iniciar câmera virtual</strong>.</li>
-            <li>Clique em <strong>Transmitir a tela do OBS</strong> acima.</li>
+            <li>Clique em <strong>Copiar link</strong> acima.</li>
             <li>
-              Na aba do VDO.Ninja, escolha a câmera <strong>OBS Virtual Camera</strong> e
-              deixe a aba aberta.
+              No OBS: <strong>Exibir → Docks → Docks de navegador personalizados</strong>,
+              cole o link, dê um nome e <strong>Aplicar</strong>.
+            </li>
+            <li>
+              No dock que aparecer dentro do OBS, escolha a câmera{" "}
+              <strong>OBS Virtual Camera</strong> (uma vez).
+            </li>
+            <li>
+              Pronto: enquanto o OBS estiver aberto, a tela aparece aqui em{" "}
+              <strong>tempo real</strong> — sem aba de navegador aberta.
             </li>
           </ol>
+          <p style={{ margin: "0.5rem 0 0", color: "#9aa2b1" }}>
+            Alternativa: use <strong>Abrir em aba</strong> (uma janela de navegador
+            comum, que precisa ficar aberta).
+          </p>
         </details>
       )}
       {bgMode === "twitch" && (
