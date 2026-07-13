@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
+import { modSlug } from "@/lib/accounts";
 import { PainelClient } from "./PainelClient";
 
 // A checagem "de verdade" acontece nas rotas de API (secao 6). Aqui validamos
@@ -26,6 +27,7 @@ export default function PainelPage() {
   return (
     <PainelClient
       modName={session.name}
+      modSlug={modSlug(session.name)}
       vdoRoom={vdoRoom}
       vdoPassword={vdoPassword}
       twitchChannel={twitchChannel}

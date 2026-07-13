@@ -1,9 +1,9 @@
 import crypto from "crypto";
 
-// Sessao minima assinada por HMAC. Nao usamos OAuth: o mod entra com uma
-// senha compartilhada (MOD_ACCESS_KEY) e o proprio nome. O nome vai dentro
-// de um cookie assinado para nao poder ser adulterado no cliente e alimenta
-// o log de auditoria (secao 7).
+// Sessao minima assinada por HMAC. Nao usamos OAuth: cada mod entra com o
+// proprio nome + senha (ver lib/accounts.ts). O nome canonico vai dentro de um
+// cookie assinado para nao poder ser adulterado no cliente, alimenta o log de
+// auditoria e define a "mesa" (canal/estado) daquele mod.
 
 export { SESSION_COOKIE, SESSION_MAX_AGE } from "./session-cookie";
 
@@ -18,14 +18,6 @@ function safeEqual(a: string, b: string): boolean {
   const bb = Buffer.from(b);
   if (ab.length !== bb.length) return false;
   return crypto.timingSafeEqual(ab, bb);
-}
-
-// Compara a senha informada com MOD_ACCESS_KEY em tempo constante.
-// Fail-closed: se a chave nao estiver configurada no servidor, nega tudo.
-export function checkAccessKey(provided: string): boolean {
-  const expected = process.env.MOD_ACCESS_KEY || "";
-  if (!expected) return false;
-  return safeEqual(provided, expected);
 }
 
 export function createSessionToken(name: string): string {

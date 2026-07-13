@@ -38,7 +38,7 @@ function LoginForm() {
     <main className="landing">
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>Painel do mod</h1>
-        <p>Entre com seu nome e a senha do painel.</p>
+        <p>Entre com seu nome e a sua senha.</p>
         <input
           placeholder="Seu nome"
           value={name}
@@ -47,7 +47,7 @@ function LoginForm() {
         />
         <input
           type="password"
-          placeholder="Senha do painel"
+          placeholder="Sua senha"
           value={key}
           onChange={(e) => setKey(e.target.value)}
           required

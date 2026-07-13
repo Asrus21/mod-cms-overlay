@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
     db: has(process.env.POSTGRES_PRISMA_URL) && has(process.env.POSTGRES_URL_NON_POOLING),
     blob: has(process.env.BLOB_READ_WRITE_TOKEN),
     auth: {
-      accessKey: has(process.env.MOD_ACCESS_KEY),
+      // Contas dos mods: sempre "ok" porque ha uma lista padrao embutida.
+      // MOD_ACCOUNTS (env) so sobrescreve; nao e obrigatorio.
+      accounts: true,
       sessionSecret: has(process.env.SESSION_SECRET),
     },
     pusher: {

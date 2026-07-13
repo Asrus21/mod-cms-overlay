@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Pusher from "pusher-js";
-import { OVERLAY_CHANNEL } from "@/lib/realtime";
+import { overlayChannel } from "@/lib/realtime";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
 import { Diagnostico } from "./Diagnostico";
@@ -37,16 +37,24 @@ const TYPE_LABEL: Record<MediaType, string> = {
 
 export function PainelClient({
   modName,
+  modSlug,
   vdoRoom,
   vdoPassword,
   twitchChannel,
 }: {
   modName: string;
+  modSlug: string;
   vdoRoom: string;
   vdoPassword: string;
   twitchChannel: string;
 }) {
   const router = useRouter();
+  // URL do overlay DESTE mod para colar no OBS (montada no cliente para pegar
+  // o dominio atual).
+  const [overlayUrl, setOverlayUrl] = useState("");
+  useEffect(() => {
+    setOverlayUrl(`${window.location.origin}/overlay?mod=${encodeURIComponent(modSlug)}`);
+  }, [modSlug]);
   const [connectionState, setConnectionState] = useState<
     "connecting" | "connected" | "disconnected"
   >("connecting");
@@ -72,13 +80,14 @@ export function PainelClient({
       else setConnectionState("disconnected");
     });
 
-    pusher.subscribe(OVERLAY_CHANNEL);
+    const ch = overlayChannel(modSlug);
+    pusher.subscribe(ch);
 
     return () => {
-      pusher.unsubscribe(OVERLAY_CHANNEL);
+      pusher.unsubscribe(ch);
       pusher.disconnect();
     };
-  }, []);
+  }, [modSlug]);
 
   async function loadMedia() {
     const params = new URLSearchParams();
@@ -259,6 +268,15 @@ export function PainelClient({
     }
   }
 
+  async function copyOverlayUrl() {
+    try {
+      await navigator.clipboard.writeText(overlayUrl);
+      alert("Link do seu overlay copiado! Cole no Browser Source do OBS.");
+    } catch {
+      alert(overlayUrl);
+    }
+  }
+
   async function copyScene() {
     try {
       await navigator.clipboard.writeText(sceneUrl);
@@ -292,8 +310,24 @@ export function PainelClient({
 
       <Diagnostico />
 
+      <section className="panel-section">
+        <h2>Seu overlay (para o OBS)</h2>
+        <p>
+          Esta é a <strong>sua</strong> mesa: só o que <strong>você</strong> colocar
+          aparece neste overlay. Cole este link num <strong>Browser Source</strong> no
+          OBS. Cada mod tem o seu próprio link.
+        </p>
+        <div className="overlay-link-row">
+          <input readOnly value={overlayUrl} onFocus={(e) => e.currentTarget.select()} />
+          <button className="primary" onClick={copyOverlayUrl}>
+            Copiar link
+          </button>
+        </div>
+      </section>
+
       <Mesa
         media={media}
+        modSlug={modSlug}
         onAction={loadHistory}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}

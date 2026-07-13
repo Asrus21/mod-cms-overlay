@@ -550,6 +550,29 @@ button:disabled {
   position: relative;
 }
 
+.overlay-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #e6e8ee;
+  background: #0b0d12;
+  padding: 2rem;
+}
+
+/* Link do overlay do mod, no painel. */
+.overlay-link-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.overlay-link-row input {
+  flex: 1 1 260px;
+}
+
 /* Elemento posicionado pela mesa de controle. O tamanho e uma FRACAO da
    largura da tela (--s), entao a mesma proporcao vale na previa e no OBS
    (WYSIWYG). O centro da midia fica em (x,y) normalizados; a transicao curta

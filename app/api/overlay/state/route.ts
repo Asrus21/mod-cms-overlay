@@ -1,16 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-// GET /api/overlay/state — estado atual do overlay (TODOS os itens na tela)
-// para o browser source do OBS recuperar o que esta na tela ao carregar/
-// reconectar (o Pusher nao repete eventos). Publico de proposito: o overlay
-// roda no OBS sem login, e so devolve o que ja esta visivel na live.
+// GET /api/overlay/state?mod=<slug> — estado atual da mesa DE UM MOD (todos os
+// itens dele) para o browser source do OBS recuperar o que esta na tela ao
+// carregar/reconectar (o Pusher nao repete eventos). Publico de proposito: o
+// overlay roda no OBS sem login e so devolve o que ja esta visivel na live
+// daquele mod.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const owner = request.nextUrl.searchParams.get("mod")?.trim();
+  if (!owner) {
+    return NextResponse.json({ items: [] });
+  }
+
   let rows = null as Awaited<ReturnType<typeof prisma.overlayState.findMany>> | null;
   try {
-    rows = await prisma.overlayState.findMany();
+    rows = await prisma.overlayState.findMany({ where: { owner } });
   } catch {
     // Tabela pode ainda nao existir; trata como "nada na tela".
     return NextResponse.json({ items: [] });

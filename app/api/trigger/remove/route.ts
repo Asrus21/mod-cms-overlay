@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishRemove } from "@/lib/realtime";
+import { modSlug } from "@/lib/accounts";
 
 // POST /api/trigger/remove — remove UM item da tela (botao ✕ na midia). Ao
 // contrario do /clear (que limpa tudo), aqui so o item indicado sai. Publica o
 // evento e apaga a linha persistida do item (best-effort).
 export async function POST(request: NextRequest) {
-  const { response } = requireMod(request);
+  const { session, response } = requireMod(request);
   if (response) return response;
+  const owner = modSlug(session.name);
 
   const body = (await request.json().catch(() => null)) as { itemId?: string } | null;
   if (!body?.itemId) {
@@ -16,14 +18,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await publishRemove({ itemId: body.itemId, triggeredAt: Date.now() });
+    await publishRemove(owner, { itemId: body.itemId, triggeredAt: Date.now() });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao remover";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
   try {
-    await prisma.overlayState.deleteMany({ where: { id: body.itemId } });
+    await prisma.overlayState.deleteMany({ where: { id: body.itemId, owner } });
   } catch {
     // best-effort; o overlay ja recebeu ao vivo.
   }

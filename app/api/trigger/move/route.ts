@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishMove } from "@/lib/realtime";
+import { modSlug } from "@/lib/accounts";
 
 // POST /api/trigger/move — atualiza a posicao/escala/som de UM item na tela em
 // tempo real (mesa de controle). Chamada com alta frequencia enquanto o mod
@@ -15,8 +16,9 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 export async function POST(request: NextRequest) {
-  const { response } = requireMod(request);
+  const { session, response } = requireMod(request);
   if (response) return response;
+  const owner = modSlug(session.name);
 
   const body = (await request.json().catch(() => null)) as {
     itemId?: string;
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
   const hidden = typeof body.hidden === "boolean" ? body.hidden : undefined;
 
   try {
-    await publishMove({
+    await publishMove(owner, {
       itemId: body.itemId,
       mediaId: body.mediaId || "",
       x,
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
   if (body.commit) {
     try {
       await prisma.overlayState.updateMany({
-        where: { id: body.itemId },
+        where: { id: body.itemId, owner },
         data: {
           x,
           y,
