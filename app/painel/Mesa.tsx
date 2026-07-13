@@ -57,6 +57,7 @@ export function Mesa({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const lastSentRef = useRef(0);
   const draggingRef = useRef(false);
+  const resizingRef = useRef(false);
 
   const [selectedId, setSelectedId] = useState("");
   const [placed, setPlaced] = useState<Media | null>(null);
@@ -214,12 +215,48 @@ export function Mesa({
     sendMove(pos.x, pos.y, s, true);
   }
 
+  // Redimensionar arrastando uma alça de canto (estilo OBS). A largura passa
+  // a acompanhar a distancia horizontal do cursor ao centro da midia.
+  function scaleFromEvent(e: React.PointerEvent): number | null {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const centerX = rect.left + pos.x * rect.width;
+    const halfW = Math.abs(e.clientX - centerX);
+    return clamp((2 * halfW) / rect.width, 0.03, 3);
+  }
+
+  function onResizeDown(e: React.PointerEvent) {
+    e.stopPropagation(); // nao inicia o arrasto de mover
+    resizingRef.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizeMove(e: React.PointerEvent) {
+    if (!resizingRef.current) return;
+    const s = scaleFromEvent(e);
+    if (s !== null) {
+      setScale(s);
+      sendMove(pos.x, pos.y, s);
+    }
+  }
+
+  function onResizeUp(e: React.PointerEvent) {
+    if (!resizingRef.current) return;
+    resizingRef.current = false;
+    const s = scaleFromEvent(e);
+    if (s !== null) {
+      setScale(s);
+      sendMove(pos.x, pos.y, s, true);
+    }
+  }
+
   return (
     <section className="panel-section">
       <h2>Mesa ao vivo</h2>
       <p>
         Coloque uma imagem/gif/vídeo na tela e <strong>arraste com o mouse</strong>{" "}
-        aqui embaixo — o overlay do OBS acompanha o movimento em tempo real.
+        aqui embaixo. Para redimensionar, <strong>puxe as alças dos cantos</strong>{" "}
+        (ou use o slider). O overlay do OBS acompanha em tempo real.
       </p>
 
       <div className="mesa-controls">
@@ -360,6 +397,15 @@ export function Mesa({
             ) : (
               <img src={placed.url} alt={placed.name} draggable={false} />
             )}
+            {(["tl", "tr", "bl", "br"] as const).map((corner) => (
+              <span
+                key={corner}
+                className={`mesa-handle ${corner}`}
+                onPointerDown={onResizeDown}
+                onPointerMove={onResizeMove}
+                onPointerUp={onResizeUp}
+              />
+            ))}
           </div>
         ) : (
           bgMode === "none" && (
