@@ -222,7 +222,7 @@ export function Mesa({
     if (!rect) return null;
     const centerX = rect.left + pos.x * rect.width;
     const halfW = Math.abs(e.clientX - centerX);
-    return clamp((2 * halfW) / rect.width, 0.03, 3);
+    return clamp((2 * halfW) / rect.width, 0.005, 3);
   }
 
   function onResizeDown(e: React.PointerEvent) {
@@ -350,13 +350,15 @@ export function Mesa({
           Tamanho
           <input
             type="range"
-            min={0.05}
+            min={0.005}
             max={1.5}
-            step={0.01}
+            step={0.005}
             value={scale}
             onChange={onScaleChange}
           />
-          <span className="mesa-scale-value">{Math.round(scale * 100)}%</span>
+          <span className="mesa-scale-value">
+            {scale < 0.05 ? (scale * 100).toFixed(1) : Math.round(scale * 100)}%
+          </span>
         </label>
       )}
 

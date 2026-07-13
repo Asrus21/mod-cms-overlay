@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   // Posicao (0..1) e tamanho (fracao da largura da tela, 0.02..3).
   const x = clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1);
   const y = clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1);
-  const scale = clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.02, 3);
+  const scale = clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.005, 3);
 
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
