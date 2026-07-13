@@ -1,7 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
+
+// Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
+// nao recarrega/pausa quando o resto da mesa re-renderiza (colocar/arrastar
+// midia dispara muitos re-renders).
+const StageBg = memo(function StageBg({ src, title }: { src: string; title: string }) {
+  return (
+    <iframe
+      className="mesa-live-bg"
+      src={src}
+      allow="autoplay; fullscreen"
+      title={title}
+    />
+  );
+});
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -325,20 +339,10 @@ export function Mesa({
         onPointerUp={onPointerUp}
       >
         {bgMode === "obs" && liveConfigured && (
-          <iframe
-            className="mesa-live-bg"
-            src={buildObsViewUrl(cfg)}
-            allow="autoplay; fullscreen"
-            title="Tela do OBS ao vivo"
-          />
+          <StageBg src={buildObsViewUrl(cfg)} title="Tela do OBS ao vivo" />
         )}
         {bgMode === "twitch" && twitchCh && twitchParent && (
-          <iframe
-            className="mesa-live-bg"
-            src={twitchSrc}
-            allow="autoplay; fullscreen"
-            title="Transmissão da Twitch"
-          />
+          <StageBg src={twitchSrc} title="Transmissão da Twitch" />
         )}
         {placed ? (
           <div

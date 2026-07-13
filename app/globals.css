@@ -241,8 +241,10 @@ a {
   user-select: none;
 }
 
-/* Tela do OBS ao vivo (iframe do VDO.Ninja) preenchendo o palco, atras da
-   midia. pointer-events:none para o arrasto passar por cima. */
+/* Fundo ao vivo (iframe Twitch/VDO) preenchendo o palco, atras da midia.
+   pointer-events:auto para poder clicar no player (dar play/desmutar na
+   Twitch). O arrasto continua funcionando porque comeca na midia e usa
+   pointer capture. */
 .mesa-live-bg {
   position: absolute;
   inset: 0;
@@ -250,7 +252,7 @@ a {
   height: 100%;
   border: 0;
   z-index: 0;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .mesa-item {
