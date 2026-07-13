@@ -296,13 +296,14 @@ export function Mesa({
       scaleY: null,
       volume: 1,
       muted: false,
-      hidden: false,
+      // Entra OCULTO: so aparece no overlay quando o mod clicar em 👁.
+      hidden: true,
     };
     try {
       const payload =
         item.type === "AUDIO"
-          ? { itemId, mediaId: item.id, streamer: streamerSlug, sticky: true, volume: 1, muted: false }
-          : { itemId, mediaId: item.id, streamer: streamerSlug, sticky: true, x, y, scale: 0.3, volume: 1, muted: false };
+          ? { itemId, mediaId: item.id, streamer: streamerSlug, sticky: true, volume: 1, muted: false, hidden: true }
+          : { itemId, mediaId: item.id, streamer: streamerSlug, sticky: true, x, y, scale: 0.3, volume: 1, muted: false, hidden: true };
       const res = await fetch("/api/trigger/show", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -340,7 +341,8 @@ export function Mesa({
       scaleY: null,
       volume: 1,
       muted: false,
-      hidden: false,
+      // Entra OCULTO: so aparece no overlay quando o mod clicar em 👁.
+      hidden: true,
     };
     try {
       const res = await fetch("/api/trigger/show", {
@@ -355,6 +357,7 @@ export function Mesa({
           x: 0.5,
           y: 0.5,
           scale: 0.04,
+          hidden: true,
         }),
       });
       if (!res.ok) {
@@ -574,7 +577,8 @@ export function Mesa({
         juntas na tela. Clique numa para selecionar e <strong>arraste com o mouse</strong>.
         Para redimensionar: <strong>cantos</strong> ajustam largura e altura,{" "}
         <strong>laterais</strong> só a largura, <strong>topo/base</strong> só a altura.
-        Cada item tem 👁 (ocultar) e ✕ (remover). O overlay do OBS acompanha em tempo real.
+        Os itens entram <strong>ocultos</strong> (aparecem esmaecidos aqui): clique em 👁
+        para mostrar no overlay, e ✕ para remover. O OBS acompanha em tempo real.
       </p>
 
       <div className="mesa-controls">
