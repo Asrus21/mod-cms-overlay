@@ -5,15 +5,23 @@ import Pusher from "pusher-js";
 import {
   EVENT_CLEAR,
   EVENT_MOVE,
+  EVENT_REMOVE,
   EVENT_SHOW,
   OVERLAY_CHANNEL,
   type ClearPayload,
   type MovePayload,
+  type RemovePayload,
   type ShowMediaPayload,
 } from "@/lib/realtime";
 
-type Placed = {
-  media: ShowMediaPayload;
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
+
+type Item = {
+  itemId: string;
+  mediaId: string;
+  url: string;
+  type: MediaType;
+  triggeredAt: number;
   x: number;
   y: number;
   scale: number;
@@ -25,59 +33,62 @@ type Placed = {
 };
 
 // Pagina "tela em branco" carregada como Browser Source no OBS (secao 2.2).
-// Sem UI de controle: so ouve a camada de tempo real e reage. Alem de
-// mostrar/limpar, acompanha a posicao/escala enviadas em tempo real pela
-// mesa de controle (evento media:move).
+// Sem UI de controle: so ouve a camada de tempo real e reage. Varios itens
+// podem coexistir na tela (sem limite), cada um com sua posicao/tamanho/som.
 export default function OverlayPage() {
-  const [placed, setPlaced] = useState<Placed | null>(null);
-  // Elemento de midia (video/audio) para aplicar volume/mudo via propriedade
-  // do DOM (nao existe atributo/prop confiavel de "volume" no React).
-  const mediaElRef = useRef<HTMLMediaElement | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const currentTriggeredAtRef = useRef(0);
-  // Ultima atualizacao de posicao aplicada, para descartar moves que chegarem
-  // fora de ordem pela rede (evita "pulos" da imagem).
-  const lastMoveAtRef = useRef(0);
+  const [items, setItems] = useState<Item[]>([]);
+  // Elementos de midia (video/audio) por itemId, para aplicar volume/mudo via
+  // propriedade do DOM (nao ha prop confiavel de "volume" no React).
+  const mediaEls = useRef<Map<string, HTMLMediaElement>>(new Map());
+  // Timeouts do modo "flash" (some sozinho) por itemId.
+  const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Ultima atualizacao aplicada por itemId, para descartar eventos fora de ordem.
+  const lastAtRef = useRef<Map<string, number>>(new Map());
+  // Marca do ultimo evento ao vivo, para o syncState nao sobrescrever algo
+  // mais novo que chegou durante o fetch.
+  const lastLiveAtRef = useRef(0);
 
-  function clearOverlay() {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = null;
-    setPlaced(null);
+  function clearTimeoutFor(itemId: string) {
+    const t = timeoutsRef.current.get(itemId);
+    if (t) clearTimeout(t);
+    timeoutsRef.current.delete(itemId);
   }
 
-  // Busca o estado atual no servidor. Chamado ao carregar e a cada reconexao
-  // do Pusher, para o overlay recuperar o que esta na tela mesmo tendo
-  // perdido o evento ao vivo (Pusher nao repete eventos).
+  function removeItem(itemId: string) {
+    clearTimeoutFor(itemId);
+    lastAtRef.current.delete(itemId);
+    setItems((prev) => prev.filter((it) => it.itemId !== itemId));
+  }
+
+  function clearAll() {
+    for (const t of timeoutsRef.current.values()) clearTimeout(t);
+    timeoutsRef.current.clear();
+    lastAtRef.current.clear();
+    setItems([]);
+  }
+
+  // Busca o estado atual no servidor (todos os itens). Chamado ao carregar e a
+  // cada reconexao do Pusher, para o overlay recuperar o que esta na tela mesmo
+  // tendo perdido eventos ao vivo (Pusher nao repete eventos).
   async function syncState() {
-    // Se um evento ao vivo (show/clear) chegar durante o fetch, nao
-    // sobrescrevemos com o estado (possivelmente mais antigo) do banco.
-    const startedAt = currentTriggeredAtRef.current;
+    const startedAt = Date.now();
     try {
       const res = await fetch("/api/overlay/state", { cache: "no-store" });
       if (!res.ok) return;
-      const { state } = await res.json();
-      if (currentTriggeredAtRef.current !== startedAt) return;
-      if (!state) {
-        setPlaced(null);
-        return;
-      }
-      setPlaced({
-        media: {
-          mediaId: state.mediaId,
-          url: state.url,
-          type: state.type,
-          durationMs: 0,
-          triggeredAt: 0,
-          sticky: state.sticky,
-        },
-        x: state.x,
-        y: state.y,
-        scale: state.scale,
-        scaleY: state.scaleY ?? null,
-        volume: typeof state.volume === "number" ? state.volume : 1,
-        muted: Boolean(state.muted),
-        hidden: Boolean(state.hidden),
-      });
+      const { items: rows } = await res.json();
+      // Se um evento ao vivo chegou durante o fetch, nao sobrescreve com o
+      // estado (possivelmente mais antigo) do banco.
+      if (lastLiveAtRef.current > startedAt) return;
+      if (!Array.isArray(rows)) return;
+      const next: Item[] = rows.map(
+        (r: Omit<Item, "triggeredAt"> & { triggeredAt?: number }) => ({
+          ...r,
+          triggeredAt: startedAt,
+        })
+      );
+      lastAtRef.current.clear();
+      for (const it of next) lastAtRef.current.set(it.itemId, startedAt);
+      setItems(next);
     } catch {
       // silencioso; o Pusher ainda pode entregar ao vivo.
     }
@@ -98,126 +109,144 @@ export default function OverlayPage() {
     const channel = pusher.subscribe(OVERLAY_CHANNEL);
 
     channel.bind(EVENT_SHOW, (payload: ShowMediaPayload) => {
-      if (payload.triggeredAt < currentTriggeredAtRef.current) return;
-      currentTriggeredAtRef.current = payload.triggeredAt;
+      const itemId = payload.itemId;
+      if (!itemId) return;
+      lastLiveAtRef.current = Math.max(lastLiveAtRef.current, payload.triggeredAt);
+      const prevAt = lastAtRef.current.get(itemId) ?? 0;
+      if (payload.triggeredAt < prevAt) return;
+      lastAtRef.current.set(itemId, payload.triggeredAt);
 
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-      lastMoveAtRef.current = payload.triggeredAt;
-
-      setPlaced({
-        media: payload,
+      const item: Item = {
+        itemId,
+        mediaId: payload.mediaId,
+        url: payload.url,
+        type: payload.type,
+        triggeredAt: payload.triggeredAt,
         x: payload.x ?? 0.5,
         y: payload.y ?? 0.5,
-        scale: payload.scale ?? 1,
+        scale: payload.scale ?? 0.3,
         scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
         volume: typeof payload.volume === "number" ? payload.volume : 1,
         muted: Boolean(payload.muted),
         hidden: Boolean(payload.hidden),
+      };
+      setItems((prev) => {
+        const rest = prev.filter((it) => it.itemId !== itemId);
+        return [...rest, item];
       });
 
-      // sticky (mesa) nao some sozinho; flash some depois de durationMs.
+      // flash (nao sticky) some sozinho depois de durationMs.
+      clearTimeoutFor(itemId);
       if (!payload.sticky && payload.durationMs > 0) {
-        timeoutRef.current = setTimeout(clearOverlay, payload.durationMs);
+        const t = setTimeout(() => removeItem(itemId), payload.durationMs);
+        timeoutsRef.current.set(itemId, t);
       }
     });
 
     channel.bind(EVENT_MOVE, (payload: MovePayload) => {
-      if (payload.triggeredAt < lastMoveAtRef.current) return; // fora de ordem
-      lastMoveAtRef.current = payload.triggeredAt;
-      // So move se for a midia atualmente na tela.
-      setPlaced((prev) =>
-        prev && prev.media.mediaId === payload.mediaId
-          ? {
-              ...prev,
-              x: payload.x,
-              y: payload.y,
-              scale: payload.scale,
-              scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
-              volume: typeof payload.volume === "number" ? payload.volume : prev.volume,
-              muted: typeof payload.muted === "boolean" ? payload.muted : prev.muted,
-              hidden: typeof payload.hidden === "boolean" ? payload.hidden : prev.hidden,
-            }
-          : prev
+      const itemId = payload.itemId;
+      if (!itemId) return;
+      lastLiveAtRef.current = Math.max(lastLiveAtRef.current, payload.triggeredAt);
+      const prevAt = lastAtRef.current.get(itemId) ?? 0;
+      if (payload.triggeredAt < prevAt) return; // fora de ordem
+      lastAtRef.current.set(itemId, payload.triggeredAt);
+      setItems((prev) =>
+        prev.map((it) =>
+          it.itemId === itemId
+            ? {
+                ...it,
+                x: payload.x,
+                y: payload.y,
+                scale: payload.scale,
+                scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
+                volume: typeof payload.volume === "number" ? payload.volume : it.volume,
+                muted: typeof payload.muted === "boolean" ? payload.muted : it.muted,
+                hidden: typeof payload.hidden === "boolean" ? payload.hidden : it.hidden,
+              }
+            : it
+        )
       );
     });
 
+    channel.bind(EVENT_REMOVE, (payload: RemovePayload) => {
+      lastLiveAtRef.current = Math.max(lastLiveAtRef.current, payload.triggeredAt);
+      if (payload.itemId) removeItem(payload.itemId);
+    });
+
     channel.bind(EVENT_CLEAR, (payload: ClearPayload) => {
-      currentTriggeredAtRef.current = Math.max(currentTriggeredAtRef.current, payload.triggeredAt);
-      clearOverlay();
+      lastLiveAtRef.current = Math.max(lastLiveAtRef.current, payload.triggeredAt);
+      clearAll();
     });
 
     return () => {
       pusher.unsubscribe(OVERLAY_CHANNEL);
       pusher.disconnect();
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      for (const t of timeoutsRef.current.values()) clearTimeout(t);
     };
   }, []);
 
-  // Aplica volume/mudo ao elemento (video/audio) sempre que mudarem. Feito via
-  // propriedade do DOM porque nao ha prop confiavel de "volume" no React.
+  // Aplica volume/mudo a cada elemento de midia sempre que os itens mudarem.
   useEffect(() => {
-    const el = mediaElRef.current;
-    if (!el) return;
-    el.volume = placed ? placed.volume : 1;
-    el.muted = placed ? placed.muted : false;
-    // placed?.hidden na dependencia: ao reexibir, o elemento remonta e precisa
-    // reaplicar volume/mudo.
-  }, [
-    placed?.volume,
-    placed?.muted,
-    placed?.hidden,
-    placed?.media.triggeredAt,
-    placed?.media.type,
-  ]);
-
-  // Oculto: nao renderiza a midia (o elemento desmonta -> para o som tambem).
-  if (!placed || placed.hidden) return <div className="overlay-root" />;
-
-  // Posiciona pelo centro da midia via transform (suave e performatico).
-  // A pequena transicao interpola entre as atualizacoes de rede, deixando o
-  // movimento fluido mesmo recebendo ~15-20 updates por segundo.
-  // scaleY definido => altura fixa (estica na vertical, pode distorcer);
-  // nulo => altura natural (mantem a proporcao original).
-  const stretched = placed.scaleY != null;
-  const style: CSSProperties = {
-    "--x": placed.x,
-    "--y": placed.y,
-    "--s": placed.scale,
-    ...(stretched ? { "--sy": placed.scaleY } : {}),
-  } as CSSProperties;
+    for (const it of items) {
+      const el = mediaEls.current.get(it.itemId);
+      if (!el) continue;
+      el.volume = it.volume;
+      el.muted = it.muted;
+    }
+  }, [items]);
 
   return (
     <div className="overlay-root">
-      {placed.media.type === "AUDIO" ? (
-        // key = triggeredAt: re-disparar o mesmo audio recria o elemento e toca de novo.
-        <audio
-          key={placed.media.triggeredAt}
-          ref={(el) => {
-            mediaElRef.current = el;
-          }}
-          src={placed.media.url}
-          autoPlay
-        />
-      ) : (
-        <div className={`overlay-movable${stretched ? " stretched" : ""}`} style={style}>
-          {placed.media.type === "VIDEO" ? (
-            <video
-              key={placed.media.triggeredAt}
+      {items.map((it) => {
+        // Oculto: nao renderiza (desmonta o elemento -> para o som tambem).
+        if (it.hidden) return null;
+
+        if (it.type === "AUDIO") {
+          return (
+            <audio
+              key={it.itemId}
               ref={(el) => {
-                mediaElRef.current = el;
+                if (el) mediaEls.current.set(it.itemId, el);
+                else mediaEls.current.delete(it.itemId);
               }}
-              className="overlay-media"
-              src={placed.media.url}
+              src={it.url}
               autoPlay
-              loop
-              playsInline
             />
-          ) : (
-            <img className="overlay-media" src={placed.media.url} alt="" />
-          )}
-        </div>
-      )}
+          );
+        }
+
+        const stretched = it.scaleY != null;
+        const style: CSSProperties = {
+          "--x": it.x,
+          "--y": it.y,
+          "--s": it.scale,
+          ...(stretched ? { "--sy": it.scaleY } : {}),
+        } as CSSProperties;
+
+        return (
+          <div
+            key={it.itemId}
+            className={`overlay-movable${stretched ? " stretched" : ""}`}
+            style={style}
+          >
+            {it.type === "VIDEO" ? (
+              <video
+                ref={(el) => {
+                  if (el) mediaEls.current.set(it.itemId, el);
+                  else mediaEls.current.delete(it.itemId);
+                }}
+                className="overlay-media"
+                src={it.url}
+                autoPlay
+                loop
+                playsInline
+              />
+            ) : (
+              <img className="overlay-media" src={it.url} alt="" />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

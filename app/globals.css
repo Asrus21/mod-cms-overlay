@@ -290,8 +290,13 @@ a {
   cursor: grab;
   touch-action: none;
   z-index: 1;
-  outline: 1px solid rgba(99, 102, 241, 0.9); /* seleção estilo OBS */
   /* largura = fracao da largura do palco (mesma proporcao do OBS) */
+}
+
+/* Contorno só no item selecionado (estilo OBS). */
+.mesa-item.selected {
+  outline: 2px solid rgba(99, 102, 241, 0.95);
+  z-index: 2;
 }
 
 .mesa-item:active {
@@ -422,19 +427,27 @@ a {
 /* Selo do audio na mesa (audio nao tem posicao/tamanho: so um indicador). */
 .mesa-audio-badge {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   border-radius: 12px;
   background: rgba(18, 21, 28, 0.9);
   border: 1px solid #2a2f3a;
   text-align: center;
+  cursor: grab;
+  touch-action: none;
   z-index: 1;
+}
+
+.mesa-audio-badge.selected {
+  outline: 2px solid rgba(99, 102, 241, 0.95);
+  z-index: 2;
+}
+
+.mesa-audio-badge:active {
+  cursor: grabbing;
 }
 
 .mesa-audio-badge .icon {
