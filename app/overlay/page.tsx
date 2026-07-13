@@ -19,6 +19,8 @@ type Placed = {
   scale: number;
   // altura como fracao da tela; nulo = altura natural (mantem a proporcao).
   scaleY: number | null;
+  volume: number;
+  muted: boolean;
 };
 
 // Pagina "tela em branco" carregada como Browser Source no OBS (secao 2.2).
@@ -27,6 +29,9 @@ type Placed = {
 // mesa de controle (evento media:move).
 export default function OverlayPage() {
   const [placed, setPlaced] = useState<Placed | null>(null);
+  // Elemento de midia (video/audio) para aplicar volume/mudo via propriedade
+  // do DOM (nao existe atributo/prop confiavel de "volume" no React).
+  const mediaElRef = useRef<HTMLMediaElement | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTriggeredAtRef = useRef(0);
   // Ultima atualizacao de posicao aplicada, para descartar moves que chegarem
@@ -68,6 +73,8 @@ export default function OverlayPage() {
         y: state.y,
         scale: state.scale,
         scaleY: state.scaleY ?? null,
+        volume: typeof state.volume === "number" ? state.volume : 1,
+        muted: Boolean(state.muted),
       });
     } catch {
       // silencioso; o Pusher ainda pode entregar ao vivo.
@@ -102,6 +109,8 @@ export default function OverlayPage() {
         y: payload.y ?? 0.5,
         scale: payload.scale ?? 1,
         scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
+        volume: typeof payload.volume === "number" ? payload.volume : 1,
+        muted: Boolean(payload.muted),
       });
 
       // sticky (mesa) nao some sozinho; flash some depois de durationMs.
@@ -122,6 +131,8 @@ export default function OverlayPage() {
               y: payload.y,
               scale: payload.scale,
               scaleY: typeof payload.scaleY === "number" ? payload.scaleY : null,
+              volume: typeof payload.volume === "number" ? payload.volume : prev.volume,
+              muted: typeof payload.muted === "boolean" ? payload.muted : prev.muted,
             }
           : prev
       );
@@ -138,6 +149,15 @@ export default function OverlayPage() {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  // Aplica volume/mudo ao elemento (video/audio) sempre que mudarem. Feito via
+  // propriedade do DOM porque nao ha prop confiavel de "volume" no React.
+  useEffect(() => {
+    const el = mediaElRef.current;
+    if (!el) return;
+    el.volume = placed ? placed.volume : 1;
+    el.muted = placed ? placed.muted : false;
+  }, [placed?.volume, placed?.muted, placed?.media.triggeredAt, placed?.media.type]);
 
   if (!placed) return <div className="overlay-root" />;
 
@@ -158,12 +178,22 @@ export default function OverlayPage() {
     <div className="overlay-root">
       {placed.media.type === "AUDIO" ? (
         // key = triggeredAt: re-disparar o mesmo audio recria o elemento e toca de novo.
-        <audio key={placed.media.triggeredAt} src={placed.media.url} autoPlay />
+        <audio
+          key={placed.media.triggeredAt}
+          ref={(el) => {
+            mediaElRef.current = el;
+          }}
+          src={placed.media.url}
+          autoPlay
+        />
       ) : (
         <div className={`overlay-movable${stretched ? " stretched" : ""}`} style={style}>
           {placed.media.type === "VIDEO" ? (
             <video
               key={placed.media.triggeredAt}
+              ref={(el) => {
+                mediaElRef.current = el;
+              }}
               className="overlay-media"
               src={placed.media.url}
               autoPlay

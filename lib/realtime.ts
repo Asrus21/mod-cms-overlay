@@ -25,17 +25,22 @@ export type ShowMediaPayload = {
   y?: number;
   scale?: number;
   scaleY?: number | null;
+  // volume do audio/video (0..1) e mudo — refletidos no overlay do OBS.
+  volume?: number;
+  muted?: boolean;
   sticky?: boolean;
 };
 
-// Atualizacao de posicao/escala em tempo real enquanto o mod arrasta o mouse.
-// scaleY nulo/ausente = altura natural (proporcao original).
+// Atualizacao de posicao/escala/som em tempo real enquanto o mod controla a
+// mesa. scaleY nulo/ausente = altura natural (proporcao original).
 export type MovePayload = {
   mediaId: string;
   x: number;
   y: number;
   scale: number;
   scaleY?: number | null;
+  volume?: number;
+  muted?: boolean;
   triggeredAt: number;
 };
 

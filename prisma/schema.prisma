@@ -54,6 +54,8 @@ model OverlayState {
   y         Float      @default(0.5)
   scale     Float      @default(1)
   scaleY    Float? // altura como fracao da tela; nulo = altura natural (sem distorcer)
+  volume    Float      @default(1) // volume do audio/video (0..1)
+  muted     Boolean    @default(false) // som mutado?
   sticky    Boolean    @default(false)
   expiresAt DateTime? // para "flash" (nao-sticky): some sozinho depois disso
   updatedAt DateTime   @updatedAt

@@ -33,6 +33,8 @@ export async function GET() {
       y: s.y,
       scale: s.scale,
       scaleY: s.scaleY ?? null,
+      volume: s.volume ?? 1,
+      muted: s.muted ?? false,
       sticky: s.sticky,
     },
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
@@ -76,6 +76,7 @@ export function Mesa({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const itemRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSentRef = useRef(0);
   const draggingRef = useRef(false);
   const resizeRef = useRef<ResizeState | null>(null);
@@ -88,10 +89,11 @@ export function Mesa({
   const [scaleX, setScaleX] = useState(0.3);
   const [scaleY, setScaleY] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
-  // Previa do video: comeca MUDA (o navegador so deixa dar autoplay se estiver
-  // muda, e evita estourar o audio no ouvido do mod ao posicionar). O botao
-  // 🔊 desmuta — o som "de verdade" toca no overlay do OBS.
-  const [previewMuted, setPreviewMuted] = useState(true);
+  // Som do audio/video: volume (0..1) e mudo. O MESMO valor e aplicado na previa
+  // do painel E enviado ao overlay do OBS, para o som ficar igual nos dois. O
+  // clique no ícone 🔊/🔇 muta/desmuta; o slider ajusta o volume.
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
   // Fundo de referencia: um print da cena do OBS carregado localmente, so
   // como guia visual para posicionar (nao vai para o overlay/servidor).
   const [bgUrl, setBgUrl] = useState<string | null>(null);
@@ -177,8 +179,8 @@ export function Mesa({
       // com altura natural (scaleY ausente).
       const payload =
         item.type === "AUDIO"
-          ? { mediaId: item.id, sticky: true }
-          : { mediaId: item.id, sticky: true, x: 0.5, y: 0.5, scale: scaleX };
+          ? { mediaId: item.id, sticky: true, volume, muted }
+          : { mediaId: item.id, sticky: true, x: 0.5, y: 0.5, scale: scaleX, volume, muted };
       const res = await fetch("/api/trigger/show", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,7 +193,6 @@ export function Mesa({
       setPlaced(item);
       setPos({ x: 0.5, y: 0.5 });
       setScaleY(null); // volta para altura natural ao colocar nova midia
-      setPreviewMuted(true); // previa sempre comeca muda
       onAction();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro");
@@ -333,18 +334,64 @@ export function Mesa({
     resizeRef.current = null;
   }
 
-  // Liga/desliga o som da PREVIA (o som "de verdade" toca no overlay do OBS).
-  // Desmutar exige um clique (gesto do usuario) — por isso e um botao.
-  function togglePreviewMute() {
-    setPreviewMuted((m) => {
-      const next = !m;
-      const v = videoRef.current;
-      if (v) {
-        v.muted = next;
-        if (!next) v.play().catch(() => {});
-      }
-      return next;
-    });
+  // Aplica volume/mudo na previa do painel (video ou audio) imediatamente.
+  const applyPreview = useCallback((vol: number, m: boolean) => {
+    const els = [videoRef.current, audioRef.current];
+    for (const el of els) {
+      if (!el) continue;
+      el.volume = vol;
+      el.muted = m;
+      if (!m) el.play().catch(() => {});
+    }
+  }, []);
+
+  // Reaplica sempre que trocar a midia colocada (o elemento e recriado).
+  useEffect(() => {
+    applyPreview(volume, muted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed?.id]);
+
+  // Envia volume/mudo ao overlay (aplica em tempo real no OBS). Funciona para
+  // audio e video; usa a posicao/tamanho atuais (irrelevantes para audio).
+  function sendAudioState(vol: number, m: boolean) {
+    if (!placed) return;
+    fetch("/api/trigger/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mediaId: placed.id,
+        x: pos.x,
+        y: pos.y,
+        scale: scaleX,
+        scaleY,
+        volume: vol,
+        muted: m,
+      }),
+    }).catch(() => {});
+  }
+
+  // Clique no ícone 🔊/🔇: muta/desmuta (painel + OBS). Ao desmutar com volume
+  // no zero, sobe para 100% para nao "desmutar" e continuar sem som.
+  function toggleMuted() {
+    const next = !muted;
+    let vol = volume;
+    if (!next && vol === 0) {
+      vol = 1;
+      setVolume(1);
+    }
+    setMuted(next);
+    applyPreview(vol, next);
+    sendAudioState(vol, next);
+  }
+
+  // Slider de volume: ajusta volume (painel + OBS). Volume 0 = mudo.
+  function onVolumeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const vol = Number(e.target.value);
+    const m = vol === 0;
+    setVolume(vol);
+    setMuted(m);
+    applyPreview(vol, m);
+    sendAudioState(vol, m);
   }
 
   // Tamanho mostrado (largura). Uma casa decimal quando muito pequeno.
@@ -462,15 +509,28 @@ export function Mesa({
         </label>
       )}
 
-      {placed?.type === "VIDEO" && (
-        <p className="mesa-bg-note" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <button onClick={togglePreviewMute}>
-            {previewMuted ? "🔊 Ouvir o som aqui" : "🔇 Silenciar prévia"}
+      {placed && (placed.type === "VIDEO" || placed.type === "AUDIO") && (
+        <div className="mesa-audio-row">
+          <button
+            className="mesa-mute"
+            onClick={toggleMuted}
+            title={muted ? "Desmutar" : "Mutar"}
+            aria-label={muted ? "Desmutar" : "Mutar"}
+          >
+            {muted ? "🔇" : "🔊"}
           </button>
-          <span>
-            A prévia começa muda; o som do vídeo toca no overlay do OBS (não aqui).
-          </span>
-        </p>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={muted ? 0 : volume}
+            onChange={onVolumeChange}
+            aria-label="Volume"
+          />
+          <span className="mesa-scale-value">{Math.round((muted ? 0 : volume) * 100)}%</span>
+          <span className="mesa-audio-note">som espelhado no OBS</span>
+        </div>
       )}
 
       <div
@@ -497,11 +557,11 @@ export function Mesa({
         {placed ? (
           isAudio ? (
             <div className="mesa-audio-badge">
-              <span className="icon">🔊</span>
+              <span className="icon">{muted ? "🔇" : "🔊"}</span>
               <div>
                 Tocando <strong>{placed.name}</strong> no overlay
               </div>
-              <audio src={placed.url} controls autoPlay />
+              <audio ref={audioRef} src={placed.url} autoPlay />
             </div>
           ) : (
             <div
@@ -520,7 +580,7 @@ export function Mesa({
                 <video
                   ref={videoRef}
                   src={placed.url}
-                  muted={previewMuted}
+                  muted={muted}
                   loop
                   autoPlay
                   playsInline

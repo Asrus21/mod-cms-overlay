@@ -203,6 +203,36 @@ a {
   color: #9aa2b1;
 }
 
+/* Controle de som (volume + mudo) da midia na mesa. O mesmo valor vai para o
+   overlay do OBS. */
+.mesa-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.mesa-audio-row input[type="range"] {
+  flex: 1;
+  max-width: 220px;
+}
+
+/* Botao de mutar: so o icone 🔊/🔇, clicavel. */
+.mesa-mute {
+  background: transparent;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.mesa-audio-note {
+  color: #9aa2b1;
+  font-size: 0.8rem;
+}
+
 .mesa-bg-row {
   display: flex;
   align-items: center;
