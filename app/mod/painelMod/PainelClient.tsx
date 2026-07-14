@@ -303,7 +303,7 @@ export function PainelClient({
 
   async function handleLogout() {
     await fetch("/api/logout", { method: "POST" });
-    router.push("/painel/login");
+    router.push("/mod/painelMod/login");
     router.refresh();
   }
 

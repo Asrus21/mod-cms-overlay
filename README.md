@@ -4,7 +4,7 @@ Mini-CMS de overlay para lives. Seus **moderadores acessam uma URL**, enviam
 imagens, gifs, vídeos ou áudios, e o conteúdo aparece **em tempo real** no
 overlay que você adiciona como *Browser Source* no OBS.
 
-- **Painel do mod:** `https://SEU-APP.vercel.app/painel`
+- **Painel do mod:** `https://SEU-APP.vercel.app/mod/painelMod`
 - **Overlay do OBS:** `https://SEU-APP.vercel.app/overlay`
 
 A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -32,8 +32,9 @@ Serviços usados: **Vercel** (hospedagem), **Neon Postgres** (banco),
 | Rota | O que é |
 |------|---------|
 | `/` | Landing simples com link para o painel |
-| `/painel` | Painel do mod (login com nome + senha compartilhada) |
-| `/painel/login` | Tela de login do painel |
+| `/mod/painelMod` | Painel do mod (login com nome + senha compartilhada) |
+| `/mod/painelMod/login` | Tela de login do painel |
+| `/painel` | Redireciona (308) para `/mod/painelMod` (link antigo) |
 | `/overlay` | Página transparente para adicionar como Browser Source no OBS |
 | `/api/login` · `/api/logout` | Sessão do mod (cookie assinado) |
 | `/api/media` | `GET` lista/filtra a biblioteca · `POST` cadastra mídia após upload |
@@ -119,7 +120,7 @@ Pronto: o app sobe e as tabelas são criadas no Neon no build.
 
 ### Seus mods — usar o painel
 
-1. Abrem `https://SEU-APP.vercel.app/painel`.
+1. Abrem `https://SEU-APP.vercel.app/mod/painelMod`.
 2. Entram com **o próprio nome** + a **senha** (`MOD_ACCESS_KEY`) que você passou.
 3. **Enviar mídia:** escolhem arquivo (imagem, gif, vídeo ou áudio). Se deixarem
    marcado *"Mostrar no overlay assim que enviar"*, já aparece na hora.
@@ -195,7 +196,7 @@ npx prisma db push              # cria as tabelas no banco configurado
 npm run dev
 ```
 
-Abra `http://localhost:3000/painel` e `http://localhost:3000/overlay` em abas
+Abra `http://localhost:3000/mod/painelMod` e `http://localhost:3000/overlay` em abas
 separadas. Para o tempo real funcionar local, preencha as variáveis do Pusher.
 
 ---

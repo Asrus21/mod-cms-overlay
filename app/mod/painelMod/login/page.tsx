@@ -25,7 +25,7 @@ function LoginForm() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Falha no login");
       }
-      router.push(params.get("callbackUrl") || "/painel");
+      router.push(params.get("callbackUrl") || "/mod/painelMod");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");

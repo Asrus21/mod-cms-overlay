@@ -167,7 +167,7 @@ arquivos, não o conteúdo pesado em si.
 > sozinha) via `media:show`, e a posição/escala (coordenadas normalizadas
 > 0..1) é transmitida com alta frequência pelo evento `media:move`
 > (`/api/trigger/move`, sem gravar no banco). O overlay descarta updates fora
-> de ordem e suaviza o movimento por CSS. Ver `app/painel/Mesa.tsx`.
+> de ordem e suaviza o movimento por CSS. Ver `app/mod/painelMod/Mesa.tsx`.
 
 > **Adendo — feed ao vivo do mod (implementado):** além do disparo de mídias
 > (arquivos), o painel permite que um mod transmita **câmera ou tela ao vivo**
