@@ -35,7 +35,8 @@ Serviços usados: **Vercel** (hospedagem), **Neon Postgres** (banco),
 | `/mod/painelMod` | Painel do mod (login com nome + senha compartilhada) |
 | `/mod/painelMod/login` | Tela de login do painel |
 | `/painel` | Redireciona (308) para `/mod/painelMod` (link antigo) |
-| `/overlay` | Página transparente para adicionar como Browser Source no OBS |
+| `/overlay/<streamer>` | Overlay permanente do streamer (Browser Source no OBS do streamer) |
+| `/mesa/<streamer>/<mod>` | Mesa do mod para o OBS do próprio mod: fundo (Twitch ou sem fundo) + os itens desse mod |
 | `/api/login` · `/api/logout` | Sessão do mod (cookie assinado) |
 | `/api/media` | `GET` lista/filtra a biblioteca · `POST` cadastra mídia após upload |
 | `/api/media/upload` | Recebe o arquivo e repassa ao Vercel Blob |
@@ -147,6 +148,18 @@ nada além do Pusher que você já configurou.
 No painel: **Mesa ao vivo → escolha a mídia → Colocar na mesa**, depois arraste o
 item na prévia (que tem a proporção 16:9 da sua cena). O controle **Tamanho**
 ajusta a escala. **Tirar da mesa** remove do overlay.
+
+### Mesa no OBS do próprio mod
+
+Cada mod tem também um **link da sua mesa para o OBS dele** (`/mesa/<streamer>/<mod>`),
+gerado na seção **Fundo da mesa** do painel. Cole no Browser Source do OBS do mod:
+ele mostra o **fundo escolhido** (a *transmissão da Twitch* como fundo, ou *sem
+fundo*/transparente) com as **mídias desse mod por cima** — as mesmas que já vão
+para o overlay do streamer (mesa individual por mod). Usa a mesma camada de tempo
+real (Pusher/websocket) do overlay; nada novo para configurar. O fundo vai
+embutido no link (`?fundo=twitch&canal=...`), então **copie o link de novo** se
+trocar a opção de fundo. Fundo de *imagem de referência* (print enviado do PC)
+continua sendo apenas um guia dentro do painel, não vai para o link.
 
 ---
 

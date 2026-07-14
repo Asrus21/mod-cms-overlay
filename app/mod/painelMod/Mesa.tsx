@@ -134,8 +134,10 @@ export function Mesa({
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
   const [twitchCh, setTwitchCh] = useState(twitchChannel);
+  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     const saved = localStorage.getItem("twitchChannel");
     if (saved) setTwitchCh(saved);
   }, []);
@@ -236,6 +238,28 @@ export function Mesa({
 
   const liveConfigured = Boolean(vdoRoom);
   const cfg = { room: vdoRoom, password: vdoPassword };
+
+  // Link da MESA para o OBS do proprio mod: mostra o fundo escolhido + os itens
+  // deste mod (os mesmos que vao para o overlay do streamer). O fundo vai
+  // embutido no link (fundo=twitch&canal=... quando o fundo atual e a Twitch;
+  // caso contrario, sem fundo/transparente). Link fixo por mod+streamer.
+  const mesaObsUrl =
+    origin && streamerSlug && modSlug
+      ? `${origin}/mesa/${streamerSlug}/${modSlug}` +
+        (bgMode === "twitch" && twitchCh
+          ? `?fundo=twitch&canal=${encodeURIComponent(twitchCh)}`
+          : "")
+      : "";
+
+  async function copyMesaObsUrl() {
+    if (!mesaObsUrl) return;
+    try {
+      await navigator.clipboard.writeText(mesaObsUrl);
+      alert("Link da sua mesa copiado! Cole no Browser Source do seu OBS.");
+    } catch {
+      alert(mesaObsUrl);
+    }
+  }
 
   const twitchParent = typeof window !== "undefined" ? window.location.hostname : "";
   const twitchSrc = twitchCh
@@ -741,6 +765,31 @@ export function Mesa({
           fundo — você não precisa abrir nada. Tem alguns segundos de atraso
           (normal da Twitch). Só aparece com a live no ar.
         </p>
+      )}
+
+      {streamerSlug && (
+        <div className="mesa-obs-link">
+          <p className="mesa-bg-label" style={{ marginBottom: "0.35rem" }}>
+            Link da sua mesa para o <strong>seu OBS</strong>
+          </p>
+          <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+            Cole no Browser Source do seu OBS. Mostra{" "}
+            {bgMode === "twitch" && twitchCh ? (
+              <>a <strong>transmissão da Twitch</strong> como fundo</>
+            ) : (
+              <><strong>sem fundo</strong> (transparente)</>
+            )}{" "}
+            com as suas mídias por cima — as mesmas que vão para o overlay do
+            streamer. O fundo acompanha a opção escolhida acima (copie de novo se
+            mudar).
+          </p>
+          <div className="overlay-link-row">
+            <input readOnly value={mesaObsUrl} onFocus={(e) => e.currentTarget.select()} />
+            <button className="primary" onClick={copyMesaObsUrl}>
+              Copiar link
+            </button>
+          </div>
+        </div>
       )}
 
       {selected && selected.media.type !== "AUDIO" && (
