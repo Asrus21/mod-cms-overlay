@@ -54,16 +54,34 @@ function genId() {
 }
 
 const HANDLES = ["tl", "tr", "bl", "br", "t", "b", "l", "r"] as const;
+// Texto so tem alças com componente horizontal (o tamanho e a fonte).
+const TEXT_HANDLES = ["tl", "tr", "bl", "br", "l", "r"] as const;
 type Handle = (typeof HANDLES)[number];
 
+// Redimensionamento "ancorado no lado oposto" (estilo OBS): o lado agarrado
+// segue o cursor e o lado oposto fica fixo. Guardamos a ancora e as direcoes
+// calculadas no pointer-down.
 type ResizeState = {
   itemId: string;
-  handle: Handle;
-  isCorner: boolean;
-  horiz: boolean;
-  vert: boolean;
+  isText: boolean;
+  hasX: boolean;
+  hasY: boolean;
+  dirX: number; // -1 (agarrou a esquerda) ou +1 (direita)
+  dirY: number; // -1 (topo) ou +1 (base)
+  anchorX: number; // borda oposta fixa, fracao da largura (0..1)
+  anchorY: number; // borda oposta fixa, fracao da altura (0..1)
   startX: number;
   startY: number | null;
+  startCX: number;
+  startCY: number;
+};
+
+type DragState = {
+  itemId: string;
+  startCX: number;
+  startCY: number;
+  startClientX: number;
+  startClientY: number;
 };
 
 type BgMode = "none" | "twitch" | "obs" | "ref";
@@ -89,7 +107,7 @@ export function Mesa({
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const lastSentRef = useRef(0);
-  const dragRef = useRef<{ itemId: string; ox: number; oy: number } | null>(null);
+  const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
   // Elementos de midia da previa (video/audio) por itemId, para aplicar
   // volume/mudo e pausar quando oculto.
@@ -109,6 +127,9 @@ export function Mesa({
   const [placing, setPlacing] = useState(false);
   // Caixa de texto: o mod digita e "Adicionar texto" coloca no meio da mesa.
   const [textInput, setTextInput] = useState("");
+  // Zoom da previa da mesa (1x..5x). So aumenta a visualizacao para ajustar
+  // itens pequenos com precisao — nao muda o tamanho real no overlay.
+  const [zoom, setZoom] = useState(1);
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
@@ -399,12 +420,16 @@ export function Mesa({
     };
   }
 
-  // --- Arrastar item ---
+  // --- Arrastar item (delta relativo: o item acompanha o cursor sem "pular") ---
   function onItemPointerDown(e: React.PointerEvent, item: PlacedItem) {
     setSelectedId(item.itemId);
-    const c = coordsFromEvent(e);
-    if (!c) return;
-    dragRef.current = { itemId: item.itemId, ox: item.x - c.x, oy: item.y - c.y };
+    dragRef.current = {
+      itemId: item.itemId,
+      startCX: item.x,
+      startCY: item.y,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+    };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -414,11 +439,11 @@ export function Mesa({
       return;
     }
     const d = dragRef.current;
-    if (!d) return;
-    const c = coordsFromEvent(e);
-    if (!c) return;
-    const nx = clamp(c.x + d.ox, 0, 1);
-    const ny = clamp(c.y + d.oy, 0, 1);
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!d || !rect) return;
+    // Move pelo MESMO deslocamento do cursor a partir de onde pegou.
+    const nx = clamp(d.startCX + (e.clientX - d.startClientX) / rect.width, 0, 1);
+    const ny = clamp(d.startCY + (e.clientY - d.startClientY) / rect.height, 0, 1);
     const next = patchItem(d.itemId, { x: nx, y: ny });
     if (next) pushMove(next, false);
   }
@@ -441,34 +466,61 @@ export function Mesa({
     if (e.target === stageRef.current) setSelectedId("");
   }
 
-  // --- Redimensionar item selecionado ---
+  // --- Redimensionar (ancorado no lado oposto, estilo OBS) ---
   function onResizeDown(e: React.PointerEvent, item: PlacedItem, handle: Handle) {
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setSelectedId(item.itemId);
-    const isCorner = handle.length === 2;
-    const horiz = handle.includes("l") || handle.includes("r");
-    const vert = handle.includes("t") || handle.includes("b");
 
-    let startY = item.scaleY;
-    // Texto: tamanho uniforme (fonte), sem esticar — nao congela altura.
-    // Congela a altura natural para poder ajustar largura/altura livremente.
-    if (item.media.type !== "TEXT" && startY == null) {
+    const isText = item.media.type === "TEXT";
+    const grabLeft = handle.includes("l");
+    const grabRight = handle.includes("r");
+    const grabTop = handle.includes("t");
+    const grabBottom = handle.includes("b");
+    const hasX = grabLeft || grabRight;
+    const hasY = !isText && (grabTop || grabBottom);
+
+    // Altura natural precisa estar "congelada" para ancorar corretamente.
+    let h = item.scaleY;
+    if (!isText && h == null) {
       const rect = stageRef.current?.getBoundingClientRect();
       const boxH = boxEls.current.get(item.itemId)?.getBoundingClientRect().height;
-      if (rect && boxH) {
-        startY = clamp(boxH / rect.height, MIN_SCALE, MAX_SCALE);
-        patchItem(item.itemId, { scaleY: startY });
-      }
+      if (rect && boxH) h = clamp(boxH / rect.height, MIN_SCALE, MAX_SCALE);
     }
+    const hh = h ?? 0;
+    const w = item.scaleX;
+
+    // Ancora = borda OPOSTA a que foi agarrada (fica fixa durante o resize).
+    // Para TEXTO, o tamanho e a FONTE (nao ha caixa por scaleX), entao a "ancora"
+    // guarda a posicao do cursor no down e o resize e por delta (sem pular).
+    const dirX = grabLeft ? -1 : 1;
+    const dirY = grabTop ? -1 : 1;
+    const rectDown = stageRef.current?.getBoundingClientRect();
+    const pointerX = rectDown ? (e.clientX - rectDown.left) / rectDown.width : item.x;
+    const anchorX = isText
+      ? pointerX
+      : grabLeft
+      ? item.x + w / 2
+      : item.x - w / 2;
+    const anchorY = grabTop ? item.y + hh / 2 : item.y - hh / 2;
+
+    if (!isText && item.scaleY == null && hh > 0) {
+      patchItem(item.itemId, { scaleY: hh });
+    }
+
     resizeRef.current = {
       itemId: item.itemId,
-      handle,
-      isCorner,
-      horiz,
-      vert,
-      startX: item.scaleX,
-      startY,
+      isText,
+      hasX,
+      hasY,
+      dirX,
+      dirY,
+      anchorX,
+      anchorY,
+      startX: w,
+      startY: isText ? null : hh,
+      startCX: item.x,
+      startCY: item.y,
     };
   }
 
@@ -476,39 +528,39 @@ export function Mesa({
     const r = resizeRef.current;
     const rect = stageRef.current?.getBoundingClientRect();
     if (!r || !rect) return;
-    const it = getItem(r.itemId);
-    if (!it) return;
-    const cx = rect.left + it.x * rect.width;
-    const cy = rect.top + it.y * rect.height;
 
-    let nx = r.startX;
-    let ny: number | null = r.startY;
+    const cx = (e.clientX - rect.left) / rect.width; // fracao da largura
+    const cy = (e.clientY - rect.top) / rect.height; // fracao da altura
 
-    // Texto: qualquer alça ajusta o tamanho (fonte) de forma uniforme.
-    if (it.media.type === "TEXT") {
-      const halfW = Math.abs(e.clientX - cx);
-      nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
-      const nextText = patchItem(r.itemId, { scaleX: nx, scaleY: null });
+    // Texto: delta relativo ao ponto agarrado (anchorX = cursor no down).
+    if (r.isText) {
+      const deltaFrac = (cx - r.anchorX) * r.dirX;
+      const nx = clamp(r.startX + deltaFrac, MIN_SCALE, MAX_SCALE);
+      const nextText = patchItem(r.itemId, { scaleX: nx, scaleY: null, x: r.startCX, y: r.startCY });
       if (nextText) pushMove(nextText, commit);
       return;
     }
 
-    if (r.isCorner) {
-      const halfW = Math.abs(e.clientX - cx);
-      const halfH = Math.abs(e.clientY - cy);
-      nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
-      ny = clamp((2 * halfH) / rect.height, MIN_SCALE, MAX_SCALE);
-    } else if (r.horiz) {
-      const halfW = Math.abs(e.clientX - cx);
-      nx = clamp((2 * halfW) / rect.width, MIN_SCALE, MAX_SCALE);
-      ny = r.startY;
-    } else {
-      const halfH = Math.abs(e.clientY - cy);
-      ny = clamp((2 * halfH) / rect.height, MIN_SCALE, MAX_SCALE);
-      nx = r.startX;
+    let nx = r.startX;
+    let ny: number | null = r.startY;
+    let ncx = r.startCX;
+    let ncy = r.startCY;
+
+    if (r.hasX) {
+      const signedW = (cx - r.anchorX) * r.dirX; // largura crescendo a partir da ancora
+      nx = clamp(signedW, MIN_SCALE, MAX_SCALE);
+      ncx = clamp(r.anchorX + (r.dirX * nx) / 2, 0, 1);
+    }
+    if (r.hasY) {
+      const signedH = (cy - r.anchorY) * r.dirY;
+      ny = clamp(signedH, MIN_SCALE, MAX_SCALE);
+      ncy = clamp(r.anchorY + (r.dirY * ny) / 2, 0, 1);
     }
 
-    const next = patchItem(r.itemId, { scaleX: nx, scaleY: ny });
+    const patch = r.isText
+      ? { scaleX: nx, scaleY: null, x: ncx, y: r.startCY }
+      : { scaleX: nx, scaleY: ny, x: ncx, y: ncy };
+    const next = patchItem(r.itemId, patch);
     if (next) pushMove(next, commit);
   }
 
@@ -739,22 +791,45 @@ export function Mesa({
         </div>
       )}
 
-      <div
-        ref={stageRef}
-        className="mesa-stage"
-        style={
-          bgMode === "ref" && bgUrl
-            ? {
-                backgroundImage: `url(${bgUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : undefined
-        }
-        onPointerDown={onStagePointerDown}
-        onPointerMove={onStagePointerMove}
-        onPointerUp={onStagePointerUp}
-      >
+      <div className="mesa-zoom-row">
+        <span>Zoom</span>
+        <input
+          type="range"
+          min={1}
+          max={5}
+          step={0.25}
+          value={zoom}
+          onChange={(e) => setZoom(Number(e.target.value))}
+        />
+        <span className="mesa-scale-value">{zoom.toFixed(2)}×</span>
+        {zoom !== 1 && (
+          <button onClick={() => setZoom(1)} title="Voltar ao 1×">
+            Resetar
+          </button>
+        )}
+        <span className="mesa-audio-note">só aumenta a visualização (não afeta o overlay)</span>
+      </div>
+
+      <div className="mesa-viewport">
+        <div
+          ref={stageRef}
+          className="mesa-stage"
+          style={
+            {
+              "--zoom": zoom,
+              ...(bgMode === "ref" && bgUrl
+                ? {
+                    backgroundImage: `url(${bgUrl})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }
+                : {}),
+            } as React.CSSProperties
+          }
+          onPointerDown={onStagePointerDown}
+          onPointerMove={onStagePointerMove}
+          onPointerUp={onStagePointerUp}
+        >
         {bgMode === "obs" && liveConfigured && (
           <StageBg src={buildObsViewUrl(cfg)} title="Tela do OBS ao vivo" />
         )}
@@ -830,7 +905,7 @@ export function Mesa({
                 {isSel && toolbar}
                 <span className="mesa-text">{it.text}</span>
                 {isSel &&
-                  HANDLES.map((h) => (
+                  TEXT_HANDLES.map((h) => (
                     <span
                       key={h}
                       className={`mesa-handle ${h}`}
@@ -893,6 +968,7 @@ export function Mesa({
         {items.length === 0 && bgMode === "none" && (
           <span className="mesa-hint">Coloque uma ou mais mídias e arraste aqui</span>
         )}
+        </div>
       </div>
     </section>
   );
