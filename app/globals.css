@@ -370,6 +370,16 @@ a {
   background: rgba(99, 102, 241, 0.9);
 }
 
+/* Alça de mover: sempre clicável, mesmo quando o item está minúsculo. */
+.mesa-item-toolbar .mesa-grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.mesa-item-toolbar .mesa-grip:active {
+  cursor: grabbing;
+}
+
 .mesa-item img,
 .mesa-item video {
   display: block;

@@ -842,6 +842,17 @@ export function Mesa({
           const toolbar = (
             <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
               <button
+                className="mesa-grip"
+                title="Arraste para mover"
+                aria-label="Mover"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onItemPointerDown(e, it);
+                }}
+              >
+                ✥
+              </button>
+              <button
                 onClick={() => toggleHidden(it)}
                 title={it.hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
                 aria-label={it.hidden ? "Mostrar" : "Ocultar"}
