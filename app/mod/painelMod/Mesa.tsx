@@ -767,21 +767,20 @@ export function Mesa({
         </p>
       )}
 
-      {streamerSlug && (
+      {streamerSlug ? (
         <div className="mesa-obs-link">
-          <p className="mesa-bg-label" style={{ marginBottom: "0.35rem" }}>
-            Link da sua mesa para o <strong>seu OBS</strong>
-          </p>
+          <p className="mesa-obs-link-title">📺 Seu link para o OBS</p>
           <p className="mesa-bg-note" style={{ marginTop: 0 }}>
-            Cole no Browser Source do seu OBS. Mostra{" "}
+            Este é o <strong>seu</strong> link (individual). Cole no{" "}
+            <strong>Browser Source do seu OBS</strong>. Ele mostra{" "}
             {bgMode === "twitch" && twitchCh ? (
               <>a <strong>transmissão da Twitch</strong> como fundo</>
             ) : (
               <><strong>sem fundo</strong> (transparente)</>
             )}{" "}
-            com as suas mídias por cima — as mesmas que vão para o overlay do
-            streamer. O fundo acompanha a opção escolhida acima (copie de novo se
-            mudar).
+            com as <strong>suas mídias por cima</strong> — as mesmas que vão para o
+            overlay do streamer. O fundo acompanha a opção escolhida acima:{" "}
+            <strong>copie o link de novo se você trocar o fundo</strong>.
           </p>
           <div className="overlay-link-row">
             <input readOnly value={mesaObsUrl} onFocus={(e) => e.currentTarget.select()} />
@@ -789,7 +788,61 @@ export function Mesa({
               Copiar link
             </button>
           </div>
+
+          <details className="obs-help">
+            <summary>Como colocar no OBS (passo a passo)</summary>
+            <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
+              <li>No OBS: <strong>Fontes → + → Navegador (Browser Source)</strong>.</li>
+              <li>Marque <strong>Local</strong> desmarcado e cole o link acima em <strong>URL</strong>.</li>
+              <li>
+                Largura/altura iguais à sua cena (ex.: <strong>1920×1080</strong>).
+              </li>
+              <li>
+                <strong>OK</strong>. Pronto: o que você colocar na mesa aparece aqui
+                na hora.
+              </li>
+            </ol>
+          </details>
+
+          <details className="obs-help">
+            <summary>Como funciona a conexão (tempo real / websocket)</summary>
+            <p style={{ margin: "0.5rem 0 0" }}>
+              Você <strong>não precisa</strong> do &quot;WebSocket do OBS&quot; nem de
+              plugin nenhum — é só colar a URL. A conexão em tempo real acontece{" "}
+              <strong>dentro da própria página</strong> que o OBS abre:
+            </p>
+            <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
+              <li>
+                Quando o OBS abre o link, a página abre um <strong>websocket</strong>{" "}
+                com o serviço de tempo real (Pusher) e entra no{" "}
+                <strong>canal do streamer</strong>{" "}
+                (<code>overlay-{streamerSlug}</code>).
+              </li>
+              <li>
+                Tudo o que você faz na mesa (colocar, mover, redimensionar, ocultar,
+                remover) é <strong>publicado nesse canal</strong> pelo servidor.
+              </li>
+              <li>
+                O OBS, que está ouvindo o canal, <strong>recebe na hora</strong> e
+                atualiza a tela — sem recarregar, sem atraso perceptível.
+              </li>
+              <li>
+                Se o OBS reconectar/recarregar, a página <strong>recupera o estado
+                atual</strong> (o que já está na mesa) automaticamente.
+              </li>
+            </ol>
+            <p className="mesa-bg-note" style={{ marginTop: "0.5rem" }}>
+              O canal é <strong>por streamer</strong>: mods diferentes do mesmo
+              streamer publicam no mesmo canal, e o overlay do streamer junta todos.
+              O seu link do OBS filtra para mostrar <strong>só as suas mídias</strong>.
+            </p>
+          </details>
         </div>
+      ) : (
+        <p className="mesa-bg-note">
+          Escolha um <strong>streamer</strong> na seção acima para gerar o{" "}
+          <strong>seu link do OBS</strong>.
+        </p>
       )}
 
       {selected && selected.media.type !== "AUDIO" && (
