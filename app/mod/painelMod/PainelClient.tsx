@@ -6,7 +6,6 @@ import Pusher from "pusher-js";
 import { streamerSlug } from "@/lib/slug";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
-import { Diagnostico } from "./Diagnostico";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -376,8 +375,6 @@ export function PainelClient({
           <button onClick={handleLogout}>Sair</button>
         </div>
       </div>
-
-      <Diagnostico />
 
       <section className="panel-section">
         <h2>Streamer</h2>
