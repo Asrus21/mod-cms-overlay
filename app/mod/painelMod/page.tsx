@@ -13,7 +13,7 @@ export default function PainelPage() {
   const session = verifySessionToken(token);
 
   if (!session) {
-    redirect("/painel/login");
+    redirect("/mod/painelMod/login");
   }
 
   // Config do feed ao vivo (VDO.Ninja). Lida SO no servidor e repassada

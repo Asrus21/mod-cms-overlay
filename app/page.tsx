@@ -3,7 +3,7 @@ export default function Home() {
     <main className="landing">
       <h1>Mod CMS Overlay</h1>
       <p>Painel de controle para disparar imagens, gifs e videos no overlay da live.</p>
-      <a className="btn" href="/painel">
+      <a className="btn" href="/mod/painelMod">
         Entrar no painel
       </a>
     </main>
