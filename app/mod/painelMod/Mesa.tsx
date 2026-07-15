@@ -767,27 +767,36 @@ export function Mesa({
         </p>
       )}
 
-      {streamerSlug ? (
-        <div className="mesa-obs-link">
-          <p className="mesa-obs-link-title">📺 Seu link para o OBS</p>
-          <p className="mesa-bg-note" style={{ marginTop: 0 }}>
-            Este é o <strong>seu</strong> link (individual). Cole no{" "}
-            <strong>Browser Source do seu OBS</strong>. Ele mostra{" "}
-            {bgMode === "twitch" && twitchCh ? (
-              <>a <strong>transmissão da Twitch</strong> como fundo</>
-            ) : (
-              <><strong>sem fundo</strong> (transparente)</>
-            )}{" "}
-            com as <strong>suas mídias por cima</strong> — as mesmas que vão para o
-            overlay do streamer. O fundo acompanha a opção escolhida acima:{" "}
-            <strong>copie o link de novo se você trocar o fundo</strong>.
-          </p>
-          <div className="overlay-link-row">
-            <input readOnly value={mesaObsUrl} onFocus={(e) => e.currentTarget.select()} />
-            <button className="primary" onClick={copyMesaObsUrl}>
-              Copiar link
-            </button>
-          </div>
+      <div className="mesa-obs-link">
+          <p className="mesa-obs-link-title">📺 Seu link para o OBS (como mod)</p>
+          {streamerSlug ? (
+            <>
+              <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+                Este é o <strong>seu</strong> link (individual). Cole no{" "}
+                <strong>Browser Source do seu OBS</strong>. Ele mostra{" "}
+                {bgMode === "twitch" && twitchCh ? (
+                  <>a <strong>transmissão da Twitch</strong> como fundo</>
+                ) : (
+                  <><strong>sem fundo</strong> (transparente)</>
+                )}{" "}
+                com as <strong>suas mídias por cima</strong> — as mesmas que vão para o
+                overlay do streamer. O fundo acompanha a opção escolhida acima:{" "}
+                <strong>copie o link de novo se você trocar o fundo</strong>.
+              </p>
+              <div className="overlay-link-row">
+                <input readOnly value={mesaObsUrl} onFocus={(e) => e.currentTarget.select()} />
+                <button className="primary" onClick={copyMesaObsUrl}>
+                  Copiar link
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+              Escolha um <strong>streamer</strong> na seção acima para gerar o{" "}
+              <strong>seu link</strong>. Abaixo, como colocá-lo no OBS e como
+              funciona a conexão.
+            </p>
+          )}
 
           <details className="obs-help">
             <summary>Como colocar no OBS (passo a passo)</summary>
@@ -816,7 +825,7 @@ export function Mesa({
                 Quando o OBS abre o link, a página abre um <strong>websocket</strong>{" "}
                 com o serviço de tempo real (Pusher) e entra no{" "}
                 <strong>canal do streamer</strong>{" "}
-                (<code>overlay-{streamerSlug}</code>).
+                (<code>overlay-{streamerSlug || "<streamer>"}</code>).
               </li>
               <li>
                 Tudo o que você faz na mesa (colocar, mover, redimensionar, ocultar,
@@ -837,13 +846,7 @@ export function Mesa({
               O seu link do OBS filtra para mostrar <strong>só as suas mídias</strong>.
             </p>
           </details>
-        </div>
-      ) : (
-        <p className="mesa-bg-note">
-          Escolha um <strong>streamer</strong> na seção acima para gerar o{" "}
-          <strong>seu link do OBS</strong>.
-        </p>
-      )}
+      </div>
 
       {selected && selected.media.type !== "AUDIO" && (
         <label className="mesa-scale">
