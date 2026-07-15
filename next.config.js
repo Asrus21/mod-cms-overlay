@@ -1,25 +1,28 @@
 /** @type {import('next').NextConfig} */
-// assetPrefix: quando este app e servido ATRAS do hub asrus.app (via rewrite),
-// o HTML referencia /_next/* que, sem prefixo, o navegador buscaria em
-// asrus.app/_next/* — onde estao os assets do HUB, nao os deste app (404, pagina
-// em branco). Com o prefixo apontando para a URL de producao DESTE projeto, os
-// assets carregam do dominio certo, funcionando tanto no acesso direto quanto
-// pelo proxy do asrus.app.
+// Este app tambem e servido ATRAS do hub asrus.app (rewrite). Sem ajuste, o HTML
+// referencia /_next/* que o navegador buscaria em asrus.app/_next/* — onde estao
+// os assets do HUB, nao os deste app: o hub devolve HTML (404) e o navegador
+// quebra com "Unexpected token '<'" (recebeu HTML onde esperava JS).
 //
-// So aplicamos em PRODUCAO (VERCEL_ENV === "production"): assim os deployments
-// de PREVIEW (mod-cms-overlay-git-*.vercel.app) continuam servindo os proprios
-// assets (mesma origem) — se apontassem para producao, os hashes nao batem e o
-// preview quebraria. Da para sobrescrever a URL com NEXT_PUBLIC_ASSET_PREFIX.
-const PROD_URL = "https://mod-cms-overlay.vercel.app";
-const assetPrefix =
-  process.env.NEXT_PUBLIC_ASSET_PREFIX ||
-  (process.env.VERCEL_ENV === "production" ? PROD_URL : undefined);
+// Solucao MESMA-ORIGEM: os assets ganham um prefixo de caminho proprio
+// (/painel-assets/...). O asrus.app encaminha /painel-assets/* para este projeto
+// (rewrite no asrus-app), e aqui um rewrite interno mapeia /painel-assets/_next/*
+// de volta para /_next/*. Assim os assets carregam sempre da origem que serviu a
+// pagina (asrus.app quando vem pelo proxy; o dominio direto caso contrario), sem
+// cross-origin/CORS e sem depender de env var.
+const ASSET_PREFIX = "/painel-assets";
 
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  assetPrefix,
+  assetPrefix: ASSET_PREFIX,
+  async rewrites() {
+    return [
+      // Serve os assets deste app tambem sob o prefixo usado no HTML.
+      { source: `${ASSET_PREFIX}/_next/:path*`, destination: "/_next/:path*" },
+    ];
+  },
 };
 
 module.exports = nextConfig;
