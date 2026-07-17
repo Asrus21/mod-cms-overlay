@@ -137,10 +137,8 @@ export function Mesa({
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
   const [twitchCh, setTwitchCh] = useState(twitchChannel);
-  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
-    setOrigin(window.location.origin);
     const saved = localStorage.getItem("twitchChannel");
     if (saved) setTwitchCh(saved);
   }, []);
@@ -241,28 +239,6 @@ export function Mesa({
 
   const liveConfigured = Boolean(vdoRoom);
   const cfg = { room: vdoRoom, password: vdoPassword };
-
-  // Link da MESA para o OBS do proprio mod: mostra o fundo escolhido + os itens
-  // deste mod (os mesmos que vao para o overlay do streamer). O fundo vai
-  // embutido no link (fundo=twitch&canal=... quando o fundo atual e a Twitch;
-  // caso contrario, sem fundo/transparente). Link fixo por mod+streamer.
-  const mesaObsUrl =
-    origin && streamerSlug && modSlug
-      ? `${origin}/mesa/${streamerSlug}/${modSlug}` +
-        (bgMode === "twitch" && twitchCh
-          ? `?fundo=twitch&canal=${encodeURIComponent(twitchCh)}`
-          : "")
-      : "";
-
-  async function copyMesaObsUrl() {
-    if (!mesaObsUrl) return;
-    try {
-      await navigator.clipboard.writeText(mesaObsUrl);
-      alert("Link da sua mesa copiado! Cole no Browser Source do seu OBS.");
-    } catch {
-      alert(mesaObsUrl);
-    }
-  }
 
   const twitchParent = typeof window !== "undefined" ? window.location.hostname : "";
   const twitchSrc = twitchCh
@@ -853,87 +829,6 @@ export function Mesa({
           (normal da Twitch). Só aparece com a live no ar.
         </p>
       )}
-
-      <div className="mesa-obs-link">
-          <p className="mesa-obs-link-title">📺 Seu link para o OBS (como mod)</p>
-          {streamerSlug ? (
-            <>
-              <p className="mesa-bg-note" style={{ marginTop: 0 }}>
-                Este é o <strong>seu</strong> link (individual). Cole no{" "}
-                <strong>Browser Source do seu OBS</strong>. Ele mostra{" "}
-                {bgMode === "twitch" && twitchCh ? (
-                  <>a <strong>transmissão da Twitch</strong> como fundo</>
-                ) : (
-                  <><strong>sem fundo</strong> (transparente)</>
-                )}{" "}
-                com as <strong>suas mídias por cima</strong> — as mesmas que vão para o
-                overlay do streamer. O fundo acompanha a opção escolhida acima:{" "}
-                <strong>copie o link de novo se você trocar o fundo</strong>.
-              </p>
-              <div className="overlay-link-row">
-                <input readOnly value={mesaObsUrl} onFocus={(e) => e.currentTarget.select()} />
-                <button className="primary" onClick={copyMesaObsUrl}>
-                  Copiar link
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="mesa-bg-note" style={{ marginTop: 0 }}>
-              Escolha um <strong>streamer</strong> na seção acima para gerar o{" "}
-              <strong>seu link</strong>. Abaixo, como colocá-lo no OBS e como
-              funciona a conexão.
-            </p>
-          )}
-
-          <details className="obs-help">
-            <summary>Como colocar no OBS (passo a passo)</summary>
-            <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
-              <li>No OBS: <strong>Fontes → + → Navegador (Browser Source)</strong>.</li>
-              <li>Marque <strong>Local</strong> desmarcado e cole o link acima em <strong>URL</strong>.</li>
-              <li>
-                Largura/altura iguais à sua cena (ex.: <strong>1920×1080</strong>).
-              </li>
-              <li>
-                <strong>OK</strong>. Pronto: o que você colocar na mesa aparece aqui
-                na hora.
-              </li>
-            </ol>
-          </details>
-
-          <details className="obs-help">
-            <summary>Como funciona a conexão (tempo real / websocket)</summary>
-            <p style={{ margin: "0.5rem 0 0" }}>
-              Você <strong>não precisa</strong> do &quot;WebSocket do OBS&quot; nem de
-              plugin nenhum — é só colar a URL. A conexão em tempo real acontece{" "}
-              <strong>dentro da própria página</strong> que o OBS abre:
-            </p>
-            <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
-              <li>
-                Quando o OBS abre o link, a página abre um <strong>websocket</strong>{" "}
-                com o serviço de tempo real (Pusher) e entra no{" "}
-                <strong>canal do streamer</strong>{" "}
-                (<code>overlay-{streamerSlug || "<streamer>"}</code>).
-              </li>
-              <li>
-                Tudo o que você faz na mesa (colocar, mover, redimensionar, ocultar,
-                remover) é <strong>publicado nesse canal</strong> pelo servidor.
-              </li>
-              <li>
-                O OBS, que está ouvindo o canal, <strong>recebe na hora</strong> e
-                atualiza a tela — sem recarregar, sem atraso perceptível.
-              </li>
-              <li>
-                Se o OBS reconectar/recarregar, a página <strong>recupera o estado
-                atual</strong> (o que já está na mesa) automaticamente.
-              </li>
-            </ol>
-            <p className="mesa-bg-note" style={{ marginTop: "0.5rem" }}>
-              O canal é <strong>por streamer</strong>: mods diferentes do mesmo
-              streamer publicam no mesmo canal, e o overlay do streamer junta todos.
-              O seu link do OBS filtra para mostrar <strong>só as suas mídias</strong>.
-            </p>
-          </details>
-      </div>
 
       {selected && selected.media.type !== "AUDIO" && (
         <label className="mesa-scale">
