@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     streamer?: string;
     type?: string;
     text?: string;
+    url?: string;
     durationMs?: number;
     sticky?: boolean;
     x?: number;
@@ -42,8 +43,19 @@ export async function POST(request: NextRequest) {
 
   // Item de texto: nao tem midia na biblioteca; carrega o texto direto.
   const isText = body.type === "TEXT" || (!body.mediaId && typeof body.text === "string");
+  // Item "embed" (feed ao vivo do OBS do mod via um relay): carrega uma URL de
+  // player http(s) direto, sem midia na biblioteca.
+  const isEmbed = body.type === "EMBED";
   const text = typeof body.text === "string" ? body.text.slice(0, 500) : "";
-  if (isText) {
+  const embedUrl = typeof body.url === "string" ? body.url.trim() : "";
+  if (isEmbed) {
+    if (!/^https?:\/\//i.test(embedUrl)) {
+      return NextResponse.json(
+        { error: "Informe um link http(s) do player (feed ao vivo)" },
+        { status: 400 }
+      );
+    }
+  } else if (isText) {
     if (!text.trim()) {
       return NextResponse.json({ error: "Digite um texto" }, { status: 400 });
     }
@@ -83,9 +95,13 @@ export async function POST(request: NextRequest) {
   // Resolve o conteudo do item: biblioteca (midia) ou texto.
   let mediaId: string | null = null;
   let url: string | null = null;
-  let mediaType: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
+  let mediaType: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
   let mediaName: string;
-  if (isText) {
+  if (isEmbed) {
+    mediaType = "EMBED";
+    url = embedUrl;
+    mediaName = "Feed ao vivo";
+  } else if (isText) {
     mediaType = "TEXT";
     mediaName = text.slice(0, 40);
   } else {
