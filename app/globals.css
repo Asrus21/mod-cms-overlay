@@ -279,15 +279,47 @@ a {
 }
 
 .login-card {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
-  width: min(340px, 90vw);
-  background: #12151c;
-  border: 1px solid #22262f;
-  border-radius: 12px;
-  padding: 1.5rem;
+  width: min(380px, 92vw);
+  background: rgba(17, 21, 32, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 1.8rem;
   text-align: left;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+
+.login-title {
+  margin: 0.35rem 0 0;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(120deg, #ffffff 0%, #c7d2fe 55%, #f0abfc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.login-sub {
+  margin: 0 0 0.4rem;
+  color: #b8bfcc;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.login-sub strong { color: #eef1f6; }
+
+.login-btn {
+  margin-top: 0.3rem;
+  padding: 0.7rem;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .login-error {
@@ -1056,4 +1088,23 @@ button:disabled {
   color: #4f46e5;
   border-color: rgba(79, 70, 229, 0.3);
   background: rgba(99, 102, 241, 0.1);
+}
+
+/* Login (tema claro) */
+:root[data-theme="light"] .login-card {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(20, 24, 40, 0.1);
+  box-shadow: 0 30px 80px rgba(30, 40, 90, 0.15);
+}
+:root[data-theme="light"] .login-title {
+  background: linear-gradient(120deg, #4f46e5 0%, #7c3aed 55%, #db2777 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="light"] .login-sub {
+  color: #3a4150;
+}
+:root[data-theme="light"] .login-sub strong {
+  color: #12151c;
 }
