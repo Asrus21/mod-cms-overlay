@@ -635,24 +635,6 @@ export function Mesa({
   }
 
   // --- Controles de tamanho/som do item selecionado ---
-  function onScaleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!selected) return;
-    const newX = Number(e.target.value);
-    let next: PlacedItem | null;
-    if (selected.scaleY == null) {
-      next = patchItem(selected.itemId, { scaleX: newX });
-    } else {
-      const factor = selected.scaleX > 0 ? newX / selected.scaleX : 1;
-      const newY = clamp(selected.scaleY * factor, MIN_SCALE, MAX_SCALE);
-      next = patchItem(selected.itemId, { scaleX: newX, scaleY: newY });
-    }
-    if (next) pushMove(next, false);
-  }
-  function onScaleCommit() {
-    const it = getItem(selectedId);
-    if (it) pushMove(it, true);
-  }
-
   function toggleMuted() {
     if (!selected) return;
     const nextMuted = !selected.muted;
@@ -828,27 +810,6 @@ export function Mesa({
           fundo — você não precisa abrir nada. Tem alguns segundos de atraso
           (normal da Twitch). Só aparece com a live no ar.
         </p>
-      )}
-
-      {selected && selected.media.type !== "AUDIO" && (
-        <label className="mesa-scale">
-          Tamanho
-          <input
-            type="range"
-            min={MIN_SCALE}
-            max={1.5}
-            step={MIN_SCALE}
-            value={selected.scaleX}
-            onChange={onScaleChange}
-            onPointerUp={onScaleCommit}
-          />
-          <span className="mesa-scale-value">
-            {selected.scaleX < 0.05
-              ? (selected.scaleX * 100).toFixed(1)
-              : Math.round(selected.scaleX * 100)}
-            %
-          </span>
-        </label>
       )}
 
       {selected && (selected.media.type === "VIDEO" || selected.media.type === "AUDIO") && (

@@ -22,13 +22,96 @@ a {
 
 .landing {
   min-height: 100vh;
-  background: #0b0d12;
+  background: radial-gradient(1200px 600px at 50% -10%, #1a1f2e 0%, #0b0d12 60%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1rem;
   text-align: center;
+  padding: 1.5rem;
+  color: #e6e8ee;
+}
+
+.landing-card {
+  width: 100%;
+  max-width: 560px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 2rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.landing-kicker {
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a5b4fc;
+  font-weight: 700;
+}
+
+.landing-card h1 {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.landing-lead {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: #c7ccd6;
+}
+
+.landing-steps {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.landing-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  line-height: 1.4;
+  color: #d7dbe4;
+}
+
+.landing-step-n {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: #6366f1;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing .btn {
+  margin-top: 0.5rem;
+  font-size: 1.05rem;
+  padding: 0.7rem 1.5rem;
+}
+
+.landing-foot {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8b91a1;
+  line-height: 1.4;
 }
 
 .btn {
