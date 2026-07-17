@@ -30,7 +30,7 @@ export type ShowMediaPayload = {
   owner: string; // mod que colocou (para mesa por mod e clear por mod)
   mediaId: string;
   url: string;
-  type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
+  type: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
   text?: string; // conteudo quando type = TEXT
   durationMs: number;
   triggeredAt: number;

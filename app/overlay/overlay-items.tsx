@@ -14,7 +14,7 @@ import {
   type ShowMediaPayload,
 } from "@/lib/realtime";
 
-export type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
+export type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
 
 export type OverlayItem = {
   itemId: string;
@@ -217,6 +217,33 @@ export function OverlayItems({ items }: { items: OverlayItem[] }) {
           return (
             <div key={it.itemId} className="overlay-movable text-item" style={style}>
               <span className="overlay-text">{it.text}</span>
+            </div>
+          );
+        }
+
+        if (it.type === "EMBED") {
+          // Feed ao vivo do OBS do mod (via relay): iframe do player. Fica na
+          // mesma tela do overlay do streamer, junto com as demais midias — um
+          // link so mostra tudo. Proporcao 16:9 por padrao; scaleY sobrescreve.
+          const stretched = it.scaleY != null;
+          const style: CSSProperties = {
+            "--x": it.x,
+            "--y": it.y,
+            "--s": it.scale,
+            ...(stretched ? { "--sy": it.scaleY } : {}),
+          } as CSSProperties;
+          return (
+            <div
+              key={it.itemId}
+              className={`overlay-movable embed-item${stretched ? " stretched" : ""}`}
+              style={style}
+            >
+              <iframe
+                className="overlay-embed"
+                src={it.url}
+                allow="autoplay; fullscreen; picture-in-picture"
+                title="Feed ao vivo"
+              />
             </div>
           );
         }

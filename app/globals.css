@@ -728,6 +728,49 @@ button:disabled {
   height: auto;
 }
 
+/* Feed ao vivo (iframe do player do relay) no overlay do streamer. Proporcao
+   16:9 por padrao; quando "stretched" (scaleY definido) segue a altura dada. */
+.overlay-movable.embed-item {
+  aspect-ratio: 16 / 9;
+}
+.overlay-movable.embed-item.stretched {
+  aspect-ratio: auto;
+}
+.overlay-embed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+/* Feed ao vivo na mesa de edicao: iframe nao captura o mouse (para arrastar a
+   caixa), com um selo identificando. */
+.mesa-item.embed-item {
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+.mesa-item.embed-item.stretched {
+  aspect-ratio: auto;
+}
+.mesa-embed {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+}
+.mesa-embed-badge {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  pointer-events: none;
+}
+
 .overlay-movable.stretched .overlay-media {
   height: 100%;
   object-fit: fill;

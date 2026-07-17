@@ -16,7 +16,7 @@ const StageBg = memo(function StageBg({ src, title }: { src: string; title: stri
   );
 });
 
-type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT";
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
 
 type Media = {
   id: string;
@@ -127,6 +127,9 @@ export function Mesa({
   const [placing, setPlacing] = useState(false);
   // Caixa de texto: o mod digita e "Adicionar texto" coloca no meio da mesa.
   const [textInput, setTextInput] = useState("");
+  // Caixa "Feed ao vivo": o mod cola o link do player (relay do OBS dele) e vira
+  // um item na mesa — aparece no mesmo overlay do streamer que as demais midias.
+  const [embedInput, setEmbedInput] = useState("");
   // Zoom da previa da mesa (1x..5x). So aumenta a visualizacao para ajustar
   // itens pequenos com precisao — nao muda o tamanho real no overlay.
   const [zoom, setZoom] = useState(1);
@@ -418,6 +421,64 @@ export function Mesa({
     }
   }
 
+  // Feed ao vivo: cola o link do player (do seu relay: Cloudflare Stream,
+  // MediaMTX, etc.) e ele vira um item na mesa (iframe), aparecendo no MESMO
+  // overlay do streamer que as demais midias — um link so mostra mesa + seu OBS.
+  async function handleAddEmbed() {
+    const link = embedInput.trim();
+    if (!link) return;
+    if (!/^https?:\/\//i.test(link)) {
+      alert("Cole um link http(s) do player do seu feed (ex.: do Cloudflare/MediaMTX).");
+      return;
+    }
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    const itemId = genId();
+    const placed: PlacedItem = {
+      itemId,
+      media: { id: itemId, name: "Feed ao vivo", type: "EMBED", url: link, tags: [] },
+      x: 0.5,
+      y: 0.5,
+      // ~1/3 da largura, altura 16:9 (0.333 * 9/16 ≈ 0.1875).
+      scaleX: 0.333,
+      scaleY: 0.1875,
+      volume: 1,
+      muted: false,
+      // Entra OCULTO: so aparece no overlay quando o mod clicar em 👁.
+      hidden: true,
+    };
+    try {
+      const res = await fetch("/api/trigger/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          streamer: streamerSlug,
+          type: "EMBED",
+          url: link,
+          sticky: true,
+          x: 0.5,
+          y: 0.5,
+          scale: 0.333,
+          scaleY: 0.1875,
+          hidden: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao adicionar feed ao vivo");
+      }
+      setItems((prev) => [...prev, placed]);
+      setSelectedId(itemId);
+      setEmbedInput("");
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro");
+    }
+  }
+
   async function handleRemoveItem(itemId: string) {
     // Otimista: some da mesa na hora.
     setItems((prev) => prev.filter((p) => p.itemId !== itemId));
@@ -694,6 +755,32 @@ export function Mesa({
           Adicionar texto
         </button>
       </div>
+
+      <div className="mesa-controls">
+        <input
+          placeholder="Feed ao vivo: link do player do seu OBS…"
+          value={embedInput}
+          onChange={(e) => setEmbedInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAddEmbed();
+          }}
+          style={{ flex: "1 1 240px" }}
+        />
+        <button
+          className="primary"
+          onClick={handleAddEmbed}
+          disabled={!embedInput.trim() || !streamerSlug}
+          title="Cole o link do player do seu relay (Cloudflare Stream, MediaMTX, etc.)"
+        >
+          Adicionar feed ao vivo
+        </button>
+      </div>
+      <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+        <strong>Feed ao vivo</strong>: transmita seu OBS para um <strong>relay</strong>{" "}
+        (ex.: Cloudflare Stream ou MediaMTX) e cole aqui o <strong>link do player</strong>.
+        Ele vira um item na mesa e aparece no <strong>mesmo overlay do streamer</strong>{" "}
+        — um link só mostra a mesa + seu OBS ao vivo juntos.
+      </p>
 
       {streamerSlug ? (
         <p className="mesa-bg-note">
@@ -1022,6 +1109,47 @@ export function Mesa({
                 <span className="mesa-text">{it.text}</span>
                 {isSel &&
                   TEXT_HANDLES.map((h) => (
+                    <span
+                      key={h}
+                      className={`mesa-handle ${h}`}
+                      onPointerDown={(e) => onResizeDown(e, it, h)}
+                      onPointerMove={onResizeMove}
+                      onPointerUp={onResizeUp}
+                    />
+                  ))}
+              </div>
+            );
+          }
+
+          if (it.media.type === "EMBED") {
+            return (
+              <div
+                key={it.itemId}
+                ref={(el) => {
+                  if (el) boxEls.current.set(it.itemId, el);
+                  else boxEls.current.delete(it.itemId);
+                }}
+                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                style={{
+                  left: `${it.x * 100}%`,
+                  top: `${it.y * 100}%`,
+                  width: `${it.scaleX * 100}%`,
+                  ...(it.scaleY != null ? { height: `${it.scaleY * 100}%` } : {}),
+                  transform: `translate(-50%, -50%)`,
+                }}
+                onPointerDown={(e) => onItemPointerDown(e, it)}
+              >
+                {isSel && toolbar}
+                {/* iframe com pointer-events:none (via CSS) para poder arrastar a caixa */}
+                <iframe
+                  className="mesa-embed"
+                  src={it.media.url}
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  title="Feed ao vivo"
+                />
+                <span className="mesa-embed-badge">Feed ao vivo</span>
+                {isSel &&
+                  HANDLES.map((h) => (
                     <span
                       key={h}
                       className={`mesa-handle ${h}`}
