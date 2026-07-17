@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, type Variants } from "framer-motion";
+import { ThemeToggle } from "./ThemeToggle";
 
 const container: Variants = {
   hidden: { opacity: 0 },
@@ -29,6 +30,7 @@ const features = [
 export default function Home() {
   return (
     <main className="landing">
+      <ThemeToggle className="theme-toggle-fixed" />
       <div className="aurora" aria-hidden="true">
         <span className="aurora-blob b1" />
         <span className="aurora-blob b2" />
