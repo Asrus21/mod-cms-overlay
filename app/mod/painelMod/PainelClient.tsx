@@ -17,14 +17,6 @@ type Media = {
   tags: string[];
 };
 
-type AuditEntry = {
-  id: string;
-  action: "SHOW" | "CLEAR" | "UPLOAD" | "LIVE";
-  actor: string;
-  mediaName: string | null;
-  createdAt: string;
-};
-
 const DEFAULT_DURATION_MS = 5000;
 
 const TYPE_LABEL: Record<MediaType, string> = {
@@ -76,7 +68,6 @@ export function PainelClient({
   const [media, setMedia] = useState<Media[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [history, setHistory] = useState<AuditEntry[]>([]);
   const [uploading, setUploading] = useState(false);
   const [autoShow, setAutoShow] = useState(true);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
@@ -140,17 +131,8 @@ export function PainelClient({
     }
   }
 
-  async function loadHistory() {
-    const res = await fetch("/api/audit");
-    if (res.ok) {
-      const data = await res.json();
-      setHistory(data.entries);
-    }
-  }
-
   useEffect(() => {
     loadMedia();
-    loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, typeFilter]);
 
@@ -237,7 +219,6 @@ export function PainelClient({
       if (autoShow && created?.id) {
         await triggerShow(created.id);
       }
-      await loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao enviar midia");
     } finally {
@@ -249,7 +230,6 @@ export function PainelClient({
     setTriggeringId(item.id);
     try {
       await triggerShow(item.id);
-      await loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao disparar midia");
     } finally {
@@ -292,7 +272,6 @@ export function PainelClient({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Falha ao limpar overlay");
       }
-      await loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao limpar overlay");
     } finally {
@@ -330,7 +309,6 @@ export function PainelClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind }),
       });
-      await loadHistory();
     } catch {
       // registro de auditoria e best-effort; nao impede a transmissao.
     }
@@ -468,7 +446,7 @@ export function PainelClient({
         modSlug={modSlug}
         streamerSlug={streamer?.slug ?? ""}
         streamerName={streamer?.name ?? ""}
-        onAction={loadHistory}
+        onAction={() => {}}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}
         twitchChannel={twitchChannel}
@@ -601,20 +579,6 @@ export function PainelClient({
             {uploading ? "Enviando..." : "Enviar"}
           </button>
         </form>
-      </section>
-
-      <section className="panel-section">
-        <h2>Historico</h2>
-        <ul className="history-list">
-          {history.map((entry) => (
-            <li key={entry.id}>
-              <strong>{entry.actor}</strong> — {entry.action}
-              {entry.mediaName ? ` — ${entry.mediaName}` : ""} —{" "}
-              {new Date(entry.createdAt).toLocaleString("pt-BR")}
-            </li>
-          ))}
-          {history.length === 0 && <li>Nenhuma acao registrada ainda.</li>}
-        </ul>
       </section>
     </main>
   );
