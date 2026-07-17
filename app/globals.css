@@ -193,13 +193,17 @@ a {
 
 .painel {
   min-height: 100vh;
-  background: #0b0d12;
-  max-width: 960px;
+  background:
+    radial-gradient(900px 480px at 50% -10%, rgba(99, 102, 241, 0.14), transparent 60%),
+    radial-gradient(700px 400px at 100% 0%, rgba(219, 39, 119, 0.08), transparent 55%),
+    #0b0d12;
+  background-attachment: fixed;
+  max-width: 980px;
   margin: 0 auto;
   padding: 2rem 1rem 4rem;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.6rem;
 }
 
 .painel-header {
@@ -207,6 +211,26 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.painel-header h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(120deg, #ffffff 0%, #c7d2fe 65%, #f0abfc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.painel-header p {
+  margin: 0.2rem 0 0;
+  color: #9aa2b1;
+  font-size: 0.9rem;
 }
 
 .status-pill {
@@ -235,10 +259,29 @@ a {
 }
 
 .panel-section {
-  background: #12151c;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    #12151c;
   border: 1px solid #22262f;
-  border-radius: 12px;
-  padding: 1.25rem;
+  border-radius: 16px;
+  padding: 1.4rem 1.45rem;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+.panel-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+}
+.panel-section > h2::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 4px;
+  height: 1.05em;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #6366f1, #db2777);
 }
 
 .media-grid {
@@ -250,12 +293,18 @@ a {
 
 .media-card {
   border: 1px solid #22262f;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.6rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   background: #171a22;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.media-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b4150;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
 }
 
 .media-thumb {
@@ -716,17 +765,33 @@ select {
   background: #0b0d12;
   border: 1px solid #2a2f3a;
   color: inherit;
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
 button {
   cursor: pointer;
   border: none;
-  border-radius: 6px;
-  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
   background: #2a2f3a;
   color: inherit;
+  transition: filter 0.15s ease, transform 0.06s ease;
+}
+button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button.primary {
@@ -1107,4 +1172,23 @@ button:disabled {
 }
 :root[data-theme="light"] .login-sub strong {
   color: #12151c;
+}
+
+/* Painel (tema claro) — brilho suave, header em gradiente, sombras leves */
+:root[data-theme="light"] .painel {
+  background:
+    radial-gradient(900px 480px at 50% -10%, rgba(99, 102, 241, 0.10), transparent 60%),
+    #eceef3;
+}
+:root[data-theme="light"] .painel-header {
+  border-bottom-color: rgba(20, 24, 40, 0.1);
+}
+:root[data-theme="light"] .painel-header h1 {
+  background: linear-gradient(120deg, #4f46e5 0%, #7c3aed 65%, #db2777 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="light"] .panel-section {
+  box-shadow: 0 12px 34px rgba(30, 40, 90, 0.08);
 }
