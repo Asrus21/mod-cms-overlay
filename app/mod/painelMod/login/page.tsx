@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import { ThemeToggle } from "../../../ThemeToggle";
 
 function LoginForm() {
@@ -38,9 +39,25 @@ function LoginForm() {
   return (
     <main className="landing">
       <ThemeToggle className="theme-toggle-fixed" />
-      <form className="login-card" onSubmit={handleSubmit}>
-        <h1>Painel do mod</h1>
-        <p>Entre com seu nome e a sua senha.</p>
+      <div className="aurora" aria-hidden="true">
+        <span className="aurora-blob b1" />
+        <span className="aurora-blob b2" />
+        <span className="aurora-blob b3" />
+      </div>
+
+      <motion.form
+        className="login-card"
+        onSubmit={handleSubmit}
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <span className="landing-kicker">⚡ Painel do mod</span>
+        <h1 className="login-title">Bem-vindo de volta</h1>
+        <p className="login-sub">
+          Entre com seu <strong>nome</strong> e a sua <strong>senha</strong>{" "}
+          (peça ao streamer).
+        </p>
         <input
           placeholder="Seu nome"
           value={name}
@@ -55,10 +72,10 @@ function LoginForm() {
           required
         />
         {error && <p className="login-error">{error}</p>}
-        <button className="primary" type="submit" disabled={loading}>
-          {loading ? "Entrando..." : "Entrar"}
+        <button className="primary login-btn" type="submit" disabled={loading}>
+          {loading ? "Entrando…" : "Entrar"}
         </button>
-      </form>
+      </motion.form>
     </main>
   );
 }
