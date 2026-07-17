@@ -604,25 +604,6 @@ button:disabled {
   z-index: 1;
 }
 
-/* Bloco do link da mesa (painel): destacado como um "local" proprio. */
-.mesa-obs-link {
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  border-radius: 10px;
-  background: rgba(99, 102, 241, 0.08);
-}
-
-.mesa-obs-link-title {
-  margin: 0 0 0.35rem;
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.mesa-obs-link .obs-help {
-  margin-top: 0.6rem;
-}
-
 /* Item de texto: largura pelo conteudo; tamanho da fonte proporcional a largura
    do container (mesa ou overlay), controlado pelo mesmo --s do slider. */
 .overlay-movable.text-item,
