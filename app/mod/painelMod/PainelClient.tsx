@@ -6,6 +6,7 @@ import Pusher from "pusher-js";
 import { streamerSlug } from "@/lib/slug";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
+import { ThemeToggle } from "../../ThemeToggle";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -350,6 +351,7 @@ export function PainelClient({
             <span className={`status-dot ${connectionState}`} />
             {statusLabel}
           </span>
+          <ThemeToggle />
           <button onClick={handleLogout}>Sair</button>
         </div>
       </div>

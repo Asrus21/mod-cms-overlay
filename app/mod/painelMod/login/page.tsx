@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ThemeToggle } from "../../../ThemeToggle";
 
 function LoginForm() {
   const router = useRouter();
@@ -36,6 +37,7 @@ function LoginForm() {
 
   return (
     <main className="landing">
+      <ThemeToggle className="theme-toggle-fixed" />
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>Painel do mod</h1>
         <p>Entre com seu nome e a sua senha.</p>

@@ -906,3 +906,154 @@ button:disabled {
   height: 100%;
   object-fit: fill;
 }
+
+/* ============================================================
+   Botao de tema (claro/escuro)
+   ============================================================ */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid #2a2f3a;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.theme-toggle:hover {
+  border-color: #6366f1;
+}
+/* Variante fixa (landing / login): canto superior direito */
+.theme-toggle-fixed {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ============================================================
+   TEMA CLARO ([data-theme="light"]) — aditivo. As regras dark
+   acima continuam sendo o padrao. O PALCO DA MESA e o /overlay
+   permanecem escuros de proposito (representam a tela sobre a live).
+   ============================================================ */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="light"] body {
+  color: #1b1f27;
+}
+
+/* Painel */
+:root[data-theme="light"] .painel {
+  background: #eceef3;
+  color: #1b1f27;
+}
+:root[data-theme="light"] .painel h1,
+:root[data-theme="light"] .painel h2,
+:root[data-theme="light"] .panel-section h2 {
+  color: #12151c;
+}
+:root[data-theme="light"] .panel-section,
+:root[data-theme="light"] .login-card,
+:root[data-theme="light"] .media-card {
+  background: #ffffff;
+  border-color: #e3e6ee;
+}
+:root[data-theme="light"] .media-thumb {
+  background: #eef1f6;
+}
+:root[data-theme="light"] .status-pill {
+  border-color: #d7dbe4;
+}
+:root[data-theme="light"] .obs-help {
+  background: #f4f6fa;
+  border-color: #e3e6ee;
+}
+
+/* Textos suaves */
+:root[data-theme="light"] .media-type,
+:root[data-theme="light"] .mesa-bg-note,
+:root[data-theme="light"] .mesa-audio-note,
+:root[data-theme="light"] .mesa-scale-value,
+:root[data-theme="light"] .diag-item {
+  color: #5b6270;
+}
+
+/* Inputs, selects, code */
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  background: #f4f6fa;
+  border-color: #d7dbe4;
+  color: #1b1f27;
+}
+:root[data-theme="light"] code {
+  background: #eef1f6;
+  border-color: #d7dbe4;
+  color: #1b1f27;
+}
+
+/* Botoes */
+:root[data-theme="light"] button {
+  background: #e6e9f0;
+  color: #1b1f27;
+}
+:root[data-theme="light"] button.primary {
+  background: #6366f1;
+  color: #fff;
+}
+:root[data-theme="light"] button.danger {
+  background: #ef4444;
+  color: #fff;
+}
+:root[data-theme="light"] .theme-toggle {
+  border-color: #d7dbe4;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* Landing clara */
+:root[data-theme="light"] .landing {
+  background: #eef1f7;
+}
+:root[data-theme="light"] .aurora-blob {
+  opacity: 0.28;
+  mix-blend-mode: multiply;
+}
+:root[data-theme="light"] .landing-card {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(20, 24, 40, 0.1);
+  box-shadow: 0 30px 80px rgba(30, 40, 90, 0.15);
+}
+:root[data-theme="light"] .landing-title {
+  background: linear-gradient(120deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="light"] .landing-lead {
+  color: #3a4150;
+}
+:root[data-theme="light"] .landing-lead strong {
+  color: #12151c;
+}
+:root[data-theme="light"] .landing-feature {
+  background: rgba(20, 24, 40, 0.03);
+  border-color: rgba(20, 24, 40, 0.08);
+}
+:root[data-theme="light"] .landing-feature-title {
+  color: #1b1f27;
+}
+:root[data-theme="light"] .landing-feature-desc,
+:root[data-theme="light"] .landing-foot {
+  color: #5b6270;
+}
+:root[data-theme="light"] .landing-kicker {
+  color: #4f46e5;
+  border-color: rgba(79, 70, 229, 0.3);
+  background: rgba(99, 102, 241, 0.1);
+}
