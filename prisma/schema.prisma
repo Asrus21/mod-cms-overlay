@@ -28,32 +28,19 @@ enum ActionType {
   LIVE
 }
 
-// Conta de mod com cadastro proprio (email + usuario + senha). O login usa
-// usuario (ou email) + senha; a recuperacao usa SO o email. A senha e guardada
-// como hash (scrypt) — nunca em texto puro. Convive com o MOD_ACCOUNTS (env)
-// como fallback para as contas antigas.
-model User {
-  id           String               @id @default(cuid())
-  email        String               @unique // sempre minusculo
-  username     String               @unique // sempre minusculo
-  passwordHash String
-  createdAt    DateTime             @default(now())
-  resetTokens  PasswordResetToken[]
-}
+// Canais que um mod modera na Twitch. Preenchido no login (OAuth) a partir da
+// API da Twitch e usado pelo painel para listar os streamers do mod. A lista e
+// substituida a cada login. `modLogin` = login da Twitch do mod (minusculo).
+model ModeratedChannel {
+  id               String   @id @default(cuid())
+  modLogin         String
+  broadcasterId    String
+  broadcasterLogin String
+  broadcasterName  String
+  updatedAt        DateTime @updatedAt
 
-// Token de "esqueci a senha": aleatorio, guardado como HASH (sha256), de uso
-// unico e com validade curta. Cada pedido novo invalida os anteriores do
-// usuario (sempre um link novo). O token em claro so existe no link do email.
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([userId])
+  @@unique([modLogin, broadcasterId])
+  @@index([modLogin])
 }
 
 // Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no

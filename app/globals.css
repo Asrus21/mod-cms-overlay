@@ -1220,3 +1220,89 @@ button:disabled {
 :root[data-theme="light"] .login-links a {
   color: #4f46e5;
 }
+
+/* ===== Login via Twitch ===== */
+.twitch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  padding: 0.8rem 1.5rem;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #fff;
+  text-decoration: none;
+  background: #9146ff;
+  box-shadow: 0 12px 30px rgba(145, 70, 255, 0.4);
+  transition: filter 0.15s ease, transform 0.06s ease;
+}
+.twitch-btn:hover { filter: brightness(1.08); }
+.twitch-btn:active { transform: translateY(1px); }
+
+/* ===== Identidade da Twitch no header ===== */
+.mod-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.mod-nick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mod-master { color: #f5c518; }
+.mod-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(145, 70, 255, 0.7);
+  flex: 0 0 auto;
+}
+.mod-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #6366f1;
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ===== Lista de streamers moderados ===== */
+.streamer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.streamer-item {
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #2a2f3a;
+  background: #171a22;
+  color: inherit;
+  font-weight: 600;
+}
+.streamer-item:hover { border-color: #6366f1; }
+.streamer-item.selected {
+  background: linear-gradient(120deg, #6366f1, #8b5cf6);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* Tema claro */
+:root[data-theme="light"] .streamer-item {
+  background: #f4f6fa;
+  border-color: #d7dbe4;
+}
+:root[data-theme="light"] .streamer-item.selected {
+  color: #fff;
+}
