@@ -1192,3 +1192,31 @@ button:disabled {
 :root[data-theme="light"] .panel-section {
   box-shadow: 0 12px 34px rgba(30, 40, 90, 0.08);
 }
+
+/* Links das telas de auth (login/registro/esqueci/redefinir) */
+.login-links {
+  margin: 0.3rem 0 0;
+  font-size: 0.88rem;
+  color: #9aa2b1;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.login-links a {
+  color: #a5b4fc;
+  text-decoration: none;
+  font-weight: 600;
+}
+.login-links a:hover {
+  text-decoration: underline;
+}
+.login-links-sep {
+  opacity: 0.5;
+}
+:root[data-theme="light"] .login-links {
+  color: #5b6270;
+}
+:root[data-theme="light"] .login-links a {
+  color: #4f46e5;
+}

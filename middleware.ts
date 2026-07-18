@@ -21,6 +21,14 @@ export const config = {
 };
 
 const LOGIN_PATH = "/mod/painelMod/login";
+// Paginas de autenticacao publicas (sem exigir cookie): login, cadastro e o
+// fluxo de recuperacao de senha.
+const PUBLIC_PATHS = new Set([
+  LOGIN_PATH,
+  "/mod/painelMod/registro",
+  "/mod/painelMod/esqueci",
+  "/mod/painelMod/redefinir",
+]);
 
 // Origem "publica" do request: prioriza o host encaminhado pelo proxy (hub
 // asrus.app), caindo para o host direto do projeto quando acessado sem proxy.
@@ -47,7 +55,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(dest + search, origin), 308);
   }
 
-  if (pathname === LOGIN_PATH) {
+  if (PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next();
   }
 
