@@ -1,41 +1,48 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { ThemeToggle } from "../../../ThemeToggle";
 
-function LoginForm() {
-  const router = useRouter();
+const ERROS: Record<string, string> = {
+  twitch: "Login cancelado na Twitch. Tente de novo.",
+  state: "Sessão de login expirou. Tente de novo.",
+  login: "Não foi possível entrar com a Twitch. Tente de novo.",
+};
+
+function LoginInner() {
   const params = useSearchParams();
-  const [name, setName] = useState("");
-  const [key, setKey] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const erro = params.get("erro");
+  const mensagem = erro ? ERROS[erro] || "Falha no login." : "";
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, key }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Falha no login");
-      }
-      router.push(params.get("callbackUrl") || "/mod/painelMod");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha no login");
-    } finally {
-      setLoading(false);
-    }
-  }
+  return (
+    <motion.div
+      className="login-card"
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <span className="landing-kicker">⚡ Painel do mod</span>
+      <h1 className="login-title">Entrar</h1>
+      <p className="login-sub">
+        Faça login com a sua conta da <strong>Twitch</strong>. Você verá os
+        streamers que você <strong>modera</strong> e poderá controlar o overlay
+        de cada um.
+      </p>
+      {mensagem && <p className="login-error">{mensagem}</p>}
+      <a className="twitch-btn" href="/api/auth/twitch/login">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+          <path d="M4 2 3 6v12h4v3h3l3-3h4l4-4V2H4zm15 10-2.5 2.5H12l-2 2v-2H6V4h13v8z" />
+          <path d="M14 6h1.5v4H14V6zm-4 0h1.5v4H10V6z" />
+        </svg>
+        Entrar com a Twitch
+      </a>
+    </motion.div>
+  );
+}
 
+export default function LoginPage() {
   return (
     <main className="landing">
       <ThemeToggle className="theme-toggle-fixed" />
@@ -44,53 +51,9 @@ function LoginForm() {
         <span className="aurora-blob b2" />
         <span className="aurora-blob b3" />
       </div>
-
-      <motion.form
-        className="login-card"
-        onSubmit={handleSubmit}
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <span className="landing-kicker">⚡ Painel do mod</span>
-        <h1 className="login-title">Bem-vindo de volta</h1>
-        <p className="login-sub">
-          Entre com seu <strong>usuário</strong> (ou email) e a sua{" "}
-          <strong>senha</strong>.
-        </p>
-        <input
-          placeholder="Usuário ou email"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoComplete="username"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Sua senha"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-        {error && <p className="login-error">{error}</p>}
-        <button className="primary login-btn" type="submit" disabled={loading}>
-          {loading ? "Entrando…" : "Entrar"}
-        </button>
-        <p className="login-links">
-          <a href="/mod/painelMod/esqueci">Esqueci a senha</a>
-          <span className="login-links-sep">·</span>
-          <a href="/mod/painelMod/registro">Criar conta</a>
-        </p>
-      </motion.form>
+      <Suspense fallback={<div className="login-card" />}>
+        <LoginInner />
+      </Suspense>
     </main>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<main className="landing" />}>
-      <LoginForm />
-    </Suspense>
   );
 }

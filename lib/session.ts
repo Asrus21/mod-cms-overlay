@@ -1,13 +1,21 @@
 import crypto from "crypto";
 
-// Sessao minima assinada por HMAC. Nao usamos OAuth: cada mod entra com o
-// proprio nome + senha (ver lib/accounts.ts). O nome canonico vai dentro de um
-// cookie assinado para nao poder ser adulterado no cliente, alimenta o log de
-// auditoria e define a "mesa" (canal/estado) daquele mod.
+// Sessao minima assinada por HMAC. O login e via Twitch (OAuth): guardamos no
+// cookie assinado a identidade da Twitch (login/nome/foto) + se e o usuario
+// master. `name` = login da Twitch (minusculo, unico) — e a identidade "dono"
+// da mesa (canal/estado por mod) e alimenta o log de auditoria.
 
 export { SESSION_COOKIE, SESSION_MAX_AGE } from "./session-cookie";
 
-export type ModSession = { name: string; iat: number };
+export type ModSession = {
+  name: string; // login da Twitch (identidade "dono")
+  display: string; // nome de exibicao da Twitch (para o header)
+  photo: string; // URL da foto de perfil da Twitch
+  master: boolean; // usuario master (asrus12): busca qualquer streamer
+  iat: number;
+};
+
+export type SessionInput = Omit<ModSession, "iat">;
 
 function getSecret(): string {
   return process.env.SESSION_SECRET || "";
@@ -20,9 +28,9 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ab, bb);
 }
 
-export function createSessionToken(name: string): string {
+export function createSessionToken(input: SessionInput): string {
   const payload = Buffer.from(
-    JSON.stringify({ name, iat: Date.now() } satisfies ModSession)
+    JSON.stringify({ ...input, iat: Date.now() } satisfies ModSession)
   ).toString("base64url");
   const sig = crypto
     .createHmac("sha256", getSecret())
@@ -47,7 +55,13 @@ export function verifySessionToken(token?: string | null): ModSession | null {
       Buffer.from(payload, "base64url").toString()
     ) as ModSession;
     if (!data.name) return null;
-    return data;
+    return {
+      name: data.name,
+      display: data.display || data.name,
+      photo: data.photo || "",
+      master: Boolean(data.master),
+      iat: data.iat || 0,
+    };
   } catch {
     return null;
   }

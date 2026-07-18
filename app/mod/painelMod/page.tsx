@@ -26,8 +26,10 @@ export default function PainelPage() {
 
   return (
     <PainelClient
-      modName={session.name}
+      modName={session.display}
       modSlug={modSlug(session.name)}
+      modPhoto={session.photo}
+      isMaster={session.master}
       vdoRoom={vdoRoom}
       vdoPassword={vdoPassword}
       twitchChannel={twitchChannel}

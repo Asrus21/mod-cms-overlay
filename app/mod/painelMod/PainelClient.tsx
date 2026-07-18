@@ -30,35 +30,57 @@ const TYPE_LABEL: Record<MediaType, string> = {
 export function PainelClient({
   modName,
   modSlug,
+  modPhoto,
+  isMaster,
   vdoRoom,
   vdoPassword,
   twitchChannel,
 }: {
   modName: string;
   modSlug: string;
+  modPhoto: string;
+  isMaster: boolean;
   vdoRoom: string;
   vdoPassword: string;
   twitchChannel: string;
 }) {
   const router = useRouter();
-  // Streamer alvo: o overlay e por streamer (compartilhado). O mod escolhe/
-  // pesquisa o streamer; tudo o que ele colocar vai para o overlay desse
-  // streamer. Guardado no navegador (nome + slug) e a lista de recentes para
-  // sugestoes na busca.
+  // Streamer alvo: o overlay e por streamer. O mod escolhe UM streamer que ele
+  // modera (lista vinda da Twitch); tudo o que ele colocar vai para o overlay
+  // desse streamer. A mesa e individual por streamer (os itens de um nao
+  // aparecem no outro; ao voltar, continuam la). O master (asrus12) tambem pode
+  // buscar qualquer streamer.
   const [streamer, setStreamer] = useState<{ slug: string; name: string } | null>(null);
-  const [recentStreamers, setRecentStreamers] = useState<{ slug: string; name: string }[]>([]);
+  const [moderated, setModerated] = useState<{ slug: string; name: string }[]>([]);
+  const [loadingStreamers, setLoadingStreamers] = useState(true);
   const [streamerQuery, setStreamerQuery] = useState("");
   const [origin, setOrigin] = useState("");
+
   useEffect(() => {
     setOrigin(window.location.origin);
+    let lastSlug: string | null = null;
     try {
-      const s = JSON.parse(localStorage.getItem("streamers") || "[]");
-      if (Array.isArray(s)) setRecentStreamers(s);
-      const last = JSON.parse(localStorage.getItem("streamerAtual") || "null");
-      if (last && last.slug) setStreamer(last);
+      lastSlug = localStorage.getItem("streamerAtualSlug");
     } catch {
       // ignora
     }
+    // Canais que o mod modera (da Twitch, salvos no login).
+    fetch("/api/me/streamers")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const list: { slug: string; name: string }[] = (data.streamers || []).map(
+          (s: { login: string; name: string }) => ({ slug: s.login, name: s.name })
+        );
+        setModerated(list);
+        // Restaura o ultimo streamer escolhido (se ainda estiver na lista, ou
+        // se for master — que pode ter escolhido qualquer um).
+        if (lastSlug) {
+          const found = list.find((s) => s.slug === lastSlug);
+          if (found) setStreamer(found);
+        }
+      })
+      .finally(() => setLoadingStreamers(false));
   }, []);
 
   const overlayUrl = streamer ? `${origin}/overlay/${streamer.slug}` : "";
@@ -93,32 +115,25 @@ export function PainelClient({
     };
   }, []);
 
-  // Seleciona/gera o streamer alvo (a partir do nome pesquisado). O slug e
-  // deterministico, entao o link do overlay nunca muda para o mesmo nome.
-  function selectStreamer(name: string) {
+  // Define o streamer atual (escolhido da lista de moderados). Guarda so o slug
+  // do ultimo escolhido para restaurar ao recarregar.
+  function pickStreamer(entry: { slug: string; name: string }) {
+    setStreamer(entry);
+    try {
+      localStorage.setItem("streamerAtualSlug", entry.slug);
+    } catch {
+      // ignora
+    }
+  }
+
+  // Busca livre (SO master): qualquer streamer, mesmo sem moderar. O slug e
+  // deterministico a partir do nome digitado.
+  function searchStreamer(name: string) {
     const trimmed = name.trim();
     const slug = streamerSlug(trimmed);
     if (!slug) return;
-    const entry = { slug, name: trimmed };
-    setStreamer(entry);
-    localStorage.setItem("streamerAtual", JSON.stringify(entry));
-    setRecentStreamers((prev) => {
-      const next = [entry, ...prev.filter((s) => s.slug !== slug)].slice(0, 12);
-      localStorage.setItem("streamers", JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function forgetStreamer(slug: string) {
-    setRecentStreamers((prev) => {
-      const next = prev.filter((s) => s.slug !== slug);
-      localStorage.setItem("streamers", JSON.stringify(next));
-      return next;
-    });
-    if (streamer?.slug === slug) {
-      setStreamer(null);
-      localStorage.removeItem("streamerAtual");
-    }
+    pickStreamer({ slug, name: trimmed });
+    setStreamerQuery("");
   }
 
   async function loadMedia() {
@@ -344,7 +359,7 @@ export function PainelClient({
       <div className="painel-header">
         <div>
           <h1>Painel do mod</h1>
-          <p>{modName}</p>
+          <p>Controle o overlay dos seus streamers</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <span className="status-pill">
@@ -352,6 +367,21 @@ export function PainelClient({
             {statusLabel}
           </span>
           <ThemeToggle />
+          {/* Identidade da Twitch: nick + foto num circulo a direita. */}
+          <span className="mod-identity">
+            <span className="mod-nick">
+              {modName}
+              {isMaster && <span className="mod-master" title="Usuário master">★</span>}
+            </span>
+            {modPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="mod-avatar" src={modPhoto} alt={modName} />
+            ) : (
+              <span className="mod-avatar mod-avatar-fallback">
+                {modName.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+          </span>
           <button onClick={handleLogout}>Sair</button>
         </div>
       </div>
@@ -359,68 +389,56 @@ export function PainelClient({
       <section className="panel-section">
         <h2>Streamer</h2>
         <p>
-          Escolha para qual <strong>streamer</strong> você vai trabalhar. Tudo o que
-          você colocar vai para o <strong>overlay desse streamer</strong> (compartilhado
-          entre os mods dele). O link do overlay é fixo — o streamer cola no OBS uma vez
-          e nunca muda.
+          Escolha <strong>um</strong> streamer que você modera. Tudo o que você
+          colocar vai para o <strong>overlay dele</strong>. A mesa é{" "}
+          <strong>individual por streamer</strong> — ao trocar, os itens do outro
+          somem; ao voltar, continuam lá.
         </p>
 
-        <div className="overlay-link-row">
-          <input
-            placeholder="Nome do streamer…"
-            value={streamerQuery}
-            onChange={(e) => setStreamerQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && streamerQuery.trim()) {
-                selectStreamer(streamerQuery);
-                setStreamerQuery("");
-              }
-            }}
-          />
-          <button
-            className="primary"
-            disabled={!streamerQuery.trim()}
-            onClick={() => {
-              selectStreamer(streamerQuery);
-              setStreamerQuery("");
-            }}
-          >
-            Gerar link / usar
-          </button>
-        </div>
+        {loadingStreamers ? (
+          <p className="mesa-bg-note">Carregando seus streamers…</p>
+        ) : moderated.length > 0 ? (
+          <div className="streamer-list">
+            {moderated.map((s) => (
+              <button
+                key={s.slug}
+                className={`streamer-item${streamer?.slug === s.slug ? " selected" : ""}`}
+                onClick={() => pickStreamer(s)}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mesa-bg-note">
+            Você ainda não modera nenhum canal na Twitch (ou a lista não carregou).
+            {isMaster ? " Use a busca abaixo." : " Peça para o streamer te dar mod e faça login de novo."}
+          </p>
+        )}
 
-        {/* Sugestoes (streamers ja usados neste navegador) que casam com a busca. */}
-        {recentStreamers.filter(
-          (s) =>
-            !streamerQuery.trim() ||
-            s.name.toLowerCase().includes(streamerQuery.trim().toLowerCase())
-        ).length > 0 && (
-          <div className="streamer-chips">
-            {recentStreamers
-              .filter(
-                (s) =>
-                  !streamerQuery.trim() ||
-                  s.name.toLowerCase().includes(streamerQuery.trim().toLowerCase())
-              )
-              .map((s) => (
-                <span key={s.slug} className="streamer-chip">
-                  <button
-                    className={streamer?.slug === s.slug ? "primary" : ""}
-                    onClick={() => selectStreamer(s.name)}
-                    title="Usar este streamer"
-                  >
-                    {s.name}
-                  </button>
-                  <button
-                    className="streamer-chip-x"
-                    onClick={() => forgetStreamer(s.slug)}
-                    title="Remover da lista"
-                    aria-label="Remover"
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
+        {/* Busca livre: SO para o usuario master (asrus12). */}
+        {isMaster && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+              <strong>Master:</strong> buscar qualquer streamer (mesmo sem moderar).
+            </p>
+            <div className="overlay-link-row">
+              <input
+                placeholder="Nome do streamer…"
+                value={streamerQuery}
+                onChange={(e) => setStreamerQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && streamerQuery.trim()) searchStreamer(streamerQuery);
+                }}
+              />
+              <button
+                className="primary"
+                disabled={!streamerQuery.trim()}
+                onClick={() => searchStreamer(streamerQuery)}
+              >
+                Usar
+              </button>
+            </div>
           </div>
         )}
 
