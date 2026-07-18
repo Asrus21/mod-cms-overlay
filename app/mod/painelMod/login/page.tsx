@@ -55,13 +55,14 @@ function LoginForm() {
         <span className="landing-kicker">⚡ Painel do mod</span>
         <h1 className="login-title">Bem-vindo de volta</h1>
         <p className="login-sub">
-          Entre com seu <strong>nome</strong> e a sua <strong>senha</strong>{" "}
-          (peça ao streamer).
+          Entre com seu <strong>usuário</strong> (ou email) e a sua{" "}
+          <strong>senha</strong>.
         </p>
         <input
-          placeholder="Seu nome"
+          placeholder="Usuário ou email"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          autoComplete="username"
           required
         />
         <input
@@ -69,12 +70,18 @@ function LoginForm() {
           placeholder="Sua senha"
           value={key}
           onChange={(e) => setKey(e.target.value)}
+          autoComplete="current-password"
           required
         />
         {error && <p className="login-error">{error}</p>}
         <button className="primary login-btn" type="submit" disabled={loading}>
           {loading ? "Entrando…" : "Entrar"}
         </button>
+        <p className="login-links">
+          <a href="/mod/painelMod/esqueci">Esqueci a senha</a>
+          <span className="login-links-sep">·</span>
+          <a href="/mod/painelMod/registro">Criar conta</a>
+        </p>
       </motion.form>
     </main>
   );

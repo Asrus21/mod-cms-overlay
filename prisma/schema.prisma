@@ -28,6 +28,34 @@ enum ActionType {
   LIVE
 }
 
+// Conta de mod com cadastro proprio (email + usuario + senha). O login usa
+// usuario (ou email) + senha; a recuperacao usa SO o email. A senha e guardada
+// como hash (scrypt) — nunca em texto puro. Convive com o MOD_ACCOUNTS (env)
+// como fallback para as contas antigas.
+model User {
+  id           String               @id @default(cuid())
+  email        String               @unique // sempre minusculo
+  username     String               @unique // sempre minusculo
+  passwordHash String
+  createdAt    DateTime             @default(now())
+  resetTokens  PasswordResetToken[]
+}
+
+// Token de "esqueci a senha": aleatorio, guardado como HASH (sha256), de uso
+// unico e com validade curta. Cada pedido novo invalida os anteriores do
+// usuario (sempre um link novo). O token em claro so existe no link do email.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
 // Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no
 // armazenamento de arquivos (Vercel Blob), aqui guardamos so a URL.
 model Media {

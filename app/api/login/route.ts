@@ -1,31 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
-import { hasModAccounts, verifyMod } from "@/lib/accounts";
+import { verifyMod } from "@/lib/accounts";
+import { normalizeEmail, normalizeUsername } from "@/lib/users";
 
-// POST /api/login — troca (nome + senha do proprio mod) por um cookie de
-// sessao assinado. Cada mod tem sua conta e sua mesa isolada. A validacao
-// "de verdade" acontece aqui no backend.
+// POST /api/login — troca (usuario/email + senha) por um cookie de sessao
+// assinado. Valida primeiro contra os usuarios cadastrados no banco; se nao
+// achar, cai para o MOD_ACCOUNTS (contas antigas via env). A "verdade" e aqui.
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as {
     name?: string;
     key?: string;
   } | null;
 
-  const name = body?.name?.trim();
-  const key = body?.key ?? "";
+  const identifier = (body?.name || "").trim();
+  const password = body?.key ?? "";
 
-  if (!name) {
-    return NextResponse.json({ error: "Informe seu nome" }, { status: 400 });
+  if (!identifier) {
+    return NextResponse.json({ error: "Informe seu usuario ou email" }, { status: 400 });
   }
-  if (!hasModAccounts()) {
-    return NextResponse.json(
-      { error: "Contas de mod nao configuradas no servidor (defina MOD_ACCOUNTS na Vercel)." },
-      { status: 503 }
-    );
+
+  // 1) Usuario cadastrado no banco (por usuario OU email).
+  let dbUsername: string | null = null;
+  try {
+    const isEmail = identifier.includes("@");
+    const where = isEmail
+      ? { email: normalizeEmail(identifier) }
+      : { username: normalizeUsername(identifier) };
+    const user = await prisma.user.findUnique({ where });
+    if (user && verifyPassword(password, user.passwordHash)) {
+      dbUsername = user.username;
+    } else if (user) {
+      // Usuario existe mas senha errada — nao cai para o fallback.
+      return NextResponse.json({ error: "Usuario/email ou senha incorretos" }, { status: 401 });
+    }
+  } catch (err) {
+    // Banco indisponivel: segue para o fallback MOD_ACCOUNTS.
+    console.warn("[login] consulta ao banco falhou:", err instanceof Error ? err.message : err);
   }
-  const canonical = verifyMod(name, key);
+
+  // 2) Fallback: contas antigas do MOD_ACCOUNTS (por nome).
+  const canonical = dbUsername ?? verifyMod(identifier, password);
   if (!canonical) {
-    return NextResponse.json({ error: "Nome ou senha incorretos" }, { status: 401 });
+    return NextResponse.json({ error: "Usuario/email ou senha incorretos" }, { status: 401 });
   }
 
   const token = createSessionToken(canonical);
