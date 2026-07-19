@@ -136,12 +136,9 @@ export function Mesa({
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
-  const [twitchCh, setTwitchCh] = useState(twitchChannel);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("twitchChannel");
-    if (saved) setTwitchCh(saved);
-  }, []);
+  // O canal da Twitch usado como fundo e SEMPRE o streamer selecionado (aba
+  // Streamer) — nao ha mais input manual. streamerSlug = login do streamer.
+  const twitchCh = streamerSlug;
 
   // Recupera os itens DESTE mod NESTE streamer ao (re)carregar o painel ou ao
   // trocar de streamer — o mod continua de onde parou em vez de ver a mesa
@@ -220,12 +217,6 @@ export function Mesa({
       else el.play().catch(() => {});
     }
   }, [items]);
-
-  function onTwitchChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value.trim();
-    setTwitchCh(v);
-    localStorage.setItem("twitchChannel", v);
-  }
 
   async function copyObsUrl() {
     const url = buildObsPushUrl({ room: vdoRoom, password: vdoPassword });
@@ -754,19 +745,13 @@ export function Mesa({
         <label className="mesa-bg-label">
           Fundo da mesa (guia para posicionar)
           <select value={bgMode} onChange={(e) => setBgMode(e.target.value as BgMode)}>
-            <option value="none">Nenhum</option>
-            <option value="twitch">Transmissão da Twitch (não precisa abrir nada)</option>
+            <option value="none">Sem fundo</option>
+            <option value="twitch">Transmissão ao vivo do streamer</option>
+            <option value="ref">Fundo fake (imagem de referência / print)</option>
             {liveConfigured && <option value="obs">Tela do OBS ao vivo (VDO.Ninja)</option>}
-            <option value="ref">Imagem de referência (print)</option>
           </select>
         </label>
 
-        {bgMode === "twitch" && (
-          <label className="mesa-bg-label">
-            Canal da Twitch
-            <input value={twitchCh} onChange={onTwitchChange} placeholder="seu_canal" />
-          </label>
-        )}
         {bgMode === "obs" && liveConfigured && (
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <button onClick={copyObsUrl}>📋 Copiar link (para o Dock do OBS)</button>
@@ -806,9 +791,16 @@ export function Mesa({
       )}
       {bgMode === "twitch" && (
         <p className="mesa-bg-note">
-          Digite o nome do seu canal acima. Usa a sua transmissão da Twitch como
-          fundo — você não precisa abrir nada. Tem alguns segundos de atraso
-          (normal da Twitch). Só aparece com a live no ar.
+          {streamerSlug ? (
+            <>
+              Usa a transmissão da Twitch de{" "}
+              <strong>{streamerName || streamerSlug}</strong> como fundo (o
+              streamer selecionado). Você não precisa abrir nada. Tem alguns
+              segundos de atraso (normal da Twitch). Só aparece com a live no ar.
+            </>
+          ) : (
+            <>Escolha um <strong>streamer</strong> na seção acima para usar a live dele como fundo.</>
+          )}
         </p>
       )}
 
