@@ -8,16 +8,32 @@ export async function GET(request: NextRequest) {
   const { session, response } = requireMod(request);
   if (response) return response;
 
-  let channels: { login: string; name: string }[] = [];
+  const byLogin = new Map<string, { login: string; name: string }>();
   try {
-    const rows = await prisma.moderatedChannel.findMany({
+    // Canais que ele modera na Twitch.
+    const mods = await prisma.moderatedChannel.findMany({
       where: { modLogin: session.name },
       orderBy: { broadcasterName: "asc" },
     });
-    channels = rows.map((r) => ({ login: r.broadcasterLogin, name: r.broadcasterName }));
+    for (const r of mods) {
+      byLogin.set(r.broadcasterLogin, { login: r.broadcasterLogin, name: r.broadcasterName });
+    }
+    // Streamers cuja mesa ele recebeu acesso "na mao" (sem ser mod).
+    const grants = await prisma.mesaAccess.findMany({
+      where: { userLogin: session.name },
+      orderBy: { streamerName: "asc" },
+    });
+    for (const g of grants) {
+      if (!byLogin.has(g.streamer)) {
+        byLogin.set(g.streamer, { login: g.streamer, name: g.streamerName || g.streamer });
+      }
+    }
   } catch (err) {
     console.warn("[me/streamers] falha ao ler:", err instanceof Error ? err.message : err);
   }
+  const channels = Array.from(byLogin.values()).sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
 
   return NextResponse.json({
     master: session.master,
