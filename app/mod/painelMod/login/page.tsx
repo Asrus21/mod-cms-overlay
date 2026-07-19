@@ -23,7 +23,7 @@ function LoginInner() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
     >
-      <span className="landing-kicker">⚡ Painel do mod</span>
+      <span className="landing-kicker">⚡ Bastidores</span>
       <h1 className="login-title">Entrar</h1>
       <p className="login-sub">
         Faça login com a sua conta da <strong>Twitch</strong>. Você verá os

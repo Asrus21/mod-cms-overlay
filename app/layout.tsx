@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mod CMS Overlay",
-  description: "Painel de controle de overlay para mods da live",
+  title: "Bastidores",
+  description: "Bastidores — monte o overlay da live em tempo real, direto do painel dos mods.",
 };
 
 // Script anti-flash (FOUC): define o tema no <html> ANTES do primeiro paint,

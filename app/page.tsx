@@ -48,7 +48,7 @@ export default function Home() {
         </motion.span>
 
         <motion.h1 className="landing-title" variants={item}>
-          Mod CMS Overlay
+          Bastidores
         </motion.h1>
 
         <motion.p className="landing-lead" variants={item}>

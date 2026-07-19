@@ -427,7 +427,7 @@ export function PainelClient({
     <main className="painel">
       <div className="painel-header">
         <div>
-          <h1>Painel do mod</h1>
+          <h1>Bastidores</h1>
           <p>Controle o overlay dos seus streamers</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
