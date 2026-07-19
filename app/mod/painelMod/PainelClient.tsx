@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Pusher from "pusher-js";
 import { streamerSlug } from "@/lib/slug";
@@ -96,6 +96,10 @@ export function PainelClient({
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  // Acesso concedido "na mao": quem pode usar a mesa deste streamer sem ser mod.
+  const [grants, setGrants] = useState<{ userLogin: string; grantedBy: string }[]>([]);
+  const [grantInput, setGrantInput] = useState("");
+  const [grantBusy, setGrantBusy] = useState(false);
 
   // Status da conexao em tempo real (secao 2.1 / 7): o mod precisa saber se
   // esta de fato conectado antes de tentar disparar algo.
@@ -134,6 +138,71 @@ export function PainelClient({
     if (!slug) return;
     pickStreamer({ slug, name: trimmed });
     setStreamerQuery("");
+  }
+
+  // Acesso a mesa: carrega/adiciona/remove pessoas que podem usar a mesa do
+  // streamer atual mesmo sem serem mod dele na Twitch.
+  const loadGrants = useCallback(async (slug: string) => {
+    if (!slug) {
+      setGrants([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/access?streamer=${encodeURIComponent(slug)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setGrants(Array.isArray(data.grants) ? data.grants : []);
+      } else {
+        setGrants([]);
+      }
+    } catch {
+      setGrants([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadGrants(streamer?.slug ?? "");
+  }, [streamer, loadGrants]);
+
+  async function addGrant() {
+    const userLogin = grantInput.trim().replace(/^@/, "").toLowerCase();
+    if (!userLogin || !streamer) return;
+    setGrantBusy(true);
+    try {
+      const res = await fetch("/api/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streamer: streamer.slug,
+          streamerName: streamer.name,
+          userLogin,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao adicionar");
+      }
+      setGrantInput("");
+      await loadGrants(streamer.slug);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Falha ao adicionar");
+    } finally {
+      setGrantBusy(false);
+    }
+  }
+
+  async function removeGrant(userLogin: string) {
+    if (!streamer) return;
+    try {
+      await fetch("/api/access", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamer: streamer.slug, userLogin }),
+      });
+      await loadGrants(streamer.slug);
+    } catch {
+      // silencioso
+    }
   }
 
   async function loadMedia() {
@@ -452,6 +521,51 @@ export function PainelClient({
               <button className="primary" onClick={copyOverlayUrl}>
                 Copiar link
               </button>
+            </div>
+
+            {/* Dar acesso a mesa deste streamer a quem NAO e mod dele. */}
+            <div className="access-box">
+              <p className="mesa-bg-label" style={{ marginBottom: "0.35rem" }}>
+                Pessoas com acesso à mesa de <strong>{streamer.name}</strong>
+              </p>
+              <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+                Adicione um <strong>usuário da Twitch</strong> (mesmo que não seja
+                mod deste streamer) para ele poder usar a mesa deste streamer.
+              </p>
+              <div className="overlay-link-row">
+                <input
+                  placeholder="usuário da Twitch…"
+                  value={grantInput}
+                  onChange={(e) => setGrantInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && grantInput.trim()) addGrant();
+                  }}
+                />
+                <button
+                  className="primary"
+                  onClick={addGrant}
+                  disabled={grantBusy || !grantInput.trim()}
+                >
+                  {grantBusy ? "Adicionando…" : "Adicionar"}
+                </button>
+              </div>
+              {grants.length > 0 && (
+                <div className="access-list">
+                  {grants.map((g) => (
+                    <span key={g.userLogin} className="access-chip">
+                      {g.userLogin}
+                      <button
+                        className="access-chip-x"
+                        title="Remover acesso"
+                        aria-label="Remover acesso"
+                        onClick={() => removeGrant(g.userLogin)}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (

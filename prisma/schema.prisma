@@ -43,6 +43,23 @@ model ModeratedChannel {
   @@index([modLogin])
 }
 
+// Acesso concedido "na mao": permite que um usuario controle a mesa de um
+// streamer mesmo sem ser mod dele na Twitch. Quem ja tem acesso ao streamer
+// (mod, master, o proprio streamer, ou alguem que ja recebeu acesso) pode
+// conceder a outra pessoa. streamer/userLogin/grantedBy = logins minusculos.
+model MesaAccess {
+  id           String   @id @default(cuid())
+  streamer     String // login do streamer (canal)
+  streamerName String   @default("") // nome de exibicao do streamer
+  userLogin    String // quem ganhou acesso
+  grantedBy    String // quem concedeu
+  createdAt    DateTime @default(now())
+
+  @@unique([streamer, userLogin])
+  @@index([userLogin])
+  @@index([streamer])
+}
+
 // Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no
 // armazenamento de arquivos (Vercel Blob), aqui guardamos so a URL.
 model Media {

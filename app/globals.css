@@ -1306,3 +1306,43 @@ button:disabled {
 :root[data-theme="light"] .streamer-item.selected {
   color: #fff;
 }
+
+/* ===== Acesso a mesa (conceder a nao-mods) ===== */
+.access-box {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.access-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.access-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid #2a2f3a;
+  background: #171a22;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.access-chip-x {
+  border: none;
+  background: transparent;
+  color: #9aa2b1;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.access-chip-x:hover { color: #ef4444; }
+:root[data-theme="light"] .access-box {
+  border-top-color: rgba(20, 24, 40, 0.1);
+}
+:root[data-theme="light"] .access-chip {
+  background: #f4f6fa;
+  border-color: #d7dbe4;
+}
