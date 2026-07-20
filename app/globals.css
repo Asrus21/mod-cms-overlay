@@ -1346,3 +1346,25 @@ button:disabled {
   background: #f4f6fa;
   border-color: #d7dbe4;
 }
+
+/* Historico de logins (so o master ve). Lista simples e legivel. */
+.login-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.login-history li {
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+:root[data-theme="light"] .login-history li {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}

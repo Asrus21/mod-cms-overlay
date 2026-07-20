@@ -27,6 +27,15 @@ const TYPE_LABEL: Record<MediaType, string> = {
   AUDIO: "Audio",
 };
 
+// Formata a data/hora do primeiro login em pt-BR (ex.: 20/07/2026 às 14:32).
+function formatLoginDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const data = d.toLocaleDateString("pt-BR");
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${data} às ${hora}`;
+}
+
 export function PainelClient({
   modName,
   modSlug,
@@ -100,6 +109,21 @@ export function PainelClient({
   const [grants, setGrants] = useState<{ userLogin: string; grantedBy: string }[]>([]);
   const [grantInput, setGrantInput] = useState("");
   const [grantBusy, setGrantBusy] = useState(false);
+  // Historico de logins (SO master): primeiro acesso de cada usuario no painel.
+  const [logins, setLogins] = useState<
+    { login: string; display: string; firstLoginAt: string }[]
+  >([]);
+
+  // Carrega o historico de logins — apenas para o master (asrus12).
+  useEffect(() => {
+    if (!isMaster) return;
+    fetch("/api/me/logins")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.logins)) setLogins(data.logins);
+      })
+      .catch(() => {});
+  }, [isMaster]);
 
   // Status da conexao em tempo real (secao 2.1 / 7): o mod precisa saber se
   // esta de fato conectado antes de tentar disparar algo.
@@ -714,6 +738,27 @@ export function PainelClient({
           </button>
         </form>
       </section>
+
+      {/* Historico de logins: exclusivo do master (asrus12). */}
+      {isMaster && (
+        <section className="panel-section">
+          <h2>Histórico de logins</h2>
+          {logins.length === 0 ? (
+            <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+              Nenhum login registrado ainda.
+            </p>
+          ) : (
+            <ul className="login-history">
+              {logins.map((u) => (
+                <li key={u.login}>
+                  Usuário: <strong>{u.display}</strong> fez login pela primeira
+                  vez em {formatLoginDate(u.firstLoginAt)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </main>
   );
 }
