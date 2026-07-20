@@ -1368,3 +1368,10 @@ button:disabled {
   background: rgba(0, 0, 0, 0.02);
   border-color: rgba(0, 0, 0, 0.08);
 }
+
+/* Marca de data aproximada no historico de logins. */
+.login-approx {
+  color: var(--muted, #9aa0aa);
+  font-style: italic;
+  font-size: 0.85em;
+}
