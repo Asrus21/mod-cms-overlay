@@ -655,6 +655,42 @@ export function Mesa({
     if (next) pushMove(next, true);
   }
 
+  // Atalhos de teclado para mostrar/esconder itens sem usar o mouse. Ignorados
+  // enquanto o mod estiver digitando em algum campo (input/textarea/select).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (/^[0-9]$/.test(e.key)) {
+        const idx = e.key === "0" ? 9 : Number(e.key) - 1;
+        const item = itemsRef.current[idx];
+        if (item) {
+          e.preventDefault();
+          toggleHidden(item);
+        }
+        return;
+      }
+
+      if (e.code === "Space") {
+        const item = getItem(selectedId);
+        if (item) {
+          e.preventDefault();
+          toggleHidden(item);
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        setSelectedId("");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
   return (
     <section className="panel-section">
       <h2>Mesa ao vivo</h2>
