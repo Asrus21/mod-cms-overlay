@@ -111,8 +111,9 @@ export function PainelClient({
   const [grantBusy, setGrantBusy] = useState(false);
   // Historico de logins (SO master): primeiro acesso de cada usuario no painel.
   const [logins, setLogins] = useState<
-    { login: string; display: string; firstLoginAt: string }[]
+    { login: string; display: string; firstLoginAt: string; approx: boolean }[]
   >([]);
+  const [importingLogins, setImportingLogins] = useState(false);
 
   // Carrega o historico de logins — apenas para o master (asrus12).
   useEffect(() => {
@@ -124,6 +125,27 @@ export function PainelClient({
       })
       .catch(() => {});
   }, [isMaster]);
+
+  // Importa acessos anteriores (aproximado): estima o primeiro acesso de quem
+  // ja usava o painel antes do registro de login, a partir de rastros no banco.
+  async function importOldLogins() {
+    setImportingLogins(true);
+    try {
+      const res = await fetch("/api/me/logins", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Falha ao importar");
+      if (Array.isArray(data.logins)) setLogins(data.logins);
+      alert(
+        data.imported > 0
+          ? `${data.imported} acesso(s) anterior(es) importado(s) com data aproximada.`
+          : "Nenhum acesso anterior novo encontrado."
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Falha ao importar");
+    } finally {
+      setImportingLogins(false);
+    }
+  }
 
   // Status da conexao em tempo real (secao 2.1 / 7): o mod precisa saber se
   // esta de fato conectado antes de tentar disparar algo.
@@ -743,6 +765,15 @@ export function PainelClient({
       {isMaster && (
         <section className="panel-section">
           <h2>Histórico de logins</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem" }}>
+            <button onClick={importOldLogins} disabled={importingLogins}>
+              {importingLogins ? "Importando…" : "Importar acessos anteriores"}
+            </button>
+            <span className="mesa-bg-note" style={{ margin: 0 }}>
+              Estima o primeiro acesso de quem já usava o painel antes do registro
+              — a data fica <strong>aproximada</strong>.
+            </span>
+          </div>
           {logins.length === 0 ? (
             <p className="mesa-bg-note" style={{ marginTop: 0 }}>
               Nenhum login registrado ainda.
@@ -753,6 +784,7 @@ export function PainelClient({
                 <li key={u.login}>
                   Usuário: <strong>{u.display}</strong> fez login pela primeira
                   vez em {formatLoginDate(u.firstLoginAt)}
+                  {u.approx && <span className="login-approx"> (aproximado)</span>}
                 </li>
               ))}
             </ul>

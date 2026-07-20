@@ -69,6 +69,10 @@ model LoginHistory {
   login        String   @unique
   display      String   @default("")
   firstLoginAt DateTime @default(now())
+  // true = data estimada a partir de rastros antigos (mídia/log/acessos), pois
+  // o usuario ja usava o painel antes de existir o registro de login. false =
+  // primeiro login registrado de verdade.
+  approx       Boolean  @default(false)
 
   @@index([firstLoginAt])
 }
