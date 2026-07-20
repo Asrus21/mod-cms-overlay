@@ -60,6 +60,19 @@ model MesaAccess {
   @@index([streamer])
 }
 
+// Historico de logins: registra o PRIMEIRO login de cada usuario no painel.
+// So o master (asrus12) ve essa lista. Guardamos apenas o nick da Twitch e a
+// data/hora do primeiro acesso — nada alem disso. `login` = login minusculo
+// (identidade canonica); `display` = nome de exibicao (capitalizacao original).
+model LoginHistory {
+  id           String   @id @default(cuid())
+  login        String   @unique
+  display      String   @default("")
+  firstLoginAt DateTime @default(now())
+
+  @@index([firstLoginAt])
+}
+
 // Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no
 // armazenamento de arquivos (Vercel Blob), aqui guardamos so a URL.
 model Media {

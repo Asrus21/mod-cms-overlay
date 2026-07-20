@@ -62,6 +62,18 @@ export async function GET(request: NextRequest) {
       console.warn("[twitch] falha ao salvar canais moderados:", err instanceof Error ? err.message : err);
     }
 
+    // Registra o PRIMEIRO login deste usuario (nao sobrescreve a data se ja
+    // existir). Best-effort: nao bloqueia o login se falhar.
+    try {
+      await prisma.loginHistory.upsert({
+        where: { login },
+        update: { display: user.displayName },
+        create: { login, display: user.displayName },
+      });
+    } catch (err) {
+      console.warn("[twitch] falha ao registrar historico de login:", err instanceof Error ? err.message : err);
+    }
+
     const token = createSessionToken({
       name: login,
       display: user.displayName,
