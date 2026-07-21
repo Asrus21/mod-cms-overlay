@@ -20,6 +20,15 @@ type Media = {
 
 const DEFAULT_DURATION_MS = 5000;
 
+// Dominio canonico do site. O link do overlay para o OBS SEMPRE usa este
+// endereco (nao o `window.location` de onde o mod abriu o painel), para bater
+// exatamente com o link "antigo"/limpo que os streamers ja tem no OBS —
+// independente de abrir em `www.`, no preview do Vercel, etc. Pode ser trocado
+// pela env NEXT_PUBLIC_PUBLIC_ORIGIN se o dominio canonico mudar.
+const PUBLIC_ORIGIN = (
+  process.env.NEXT_PUBLIC_PUBLIC_ORIGIN || "https://asrus.app"
+).replace(/\/+$/, "");
+
 const TYPE_LABEL: Record<MediaType, string> = {
   IMAGE: "Imagem",
   GIF: "Gif",
@@ -63,10 +72,8 @@ export function PainelClient({
   const [moderated, setModerated] = useState<{ slug: string; name: string }[]>([]);
   const [loadingStreamers, setLoadingStreamers] = useState(true);
   const [streamerQuery, setStreamerQuery] = useState("");
-  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
-    setOrigin(window.location.origin);
     let lastSlug: string | null = null;
     try {
       lastSlug = localStorage.getItem("streamerAtualSlug");
@@ -92,7 +99,7 @@ export function PainelClient({
       .finally(() => setLoadingStreamers(false));
   }, []);
 
-  const overlayUrl = streamer ? `${origin}/overlay/${streamer.slug}` : "";
+  const overlayUrl = streamer ? `${PUBLIC_ORIGIN}/overlay/${streamer.slug}` : "";
 
   const [connectionState, setConnectionState] = useState<
     "connecting" | "connected" | "disconnected"
