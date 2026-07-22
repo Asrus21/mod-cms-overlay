@@ -114,6 +114,9 @@ export function Mesa({
   const mediaEls = useRef<Map<string, HTMLMediaElement>>(new Map());
   // Caixas dos itens por itemId, para medir a altura natural ao redimensionar.
   const boxEls = useRef<Map<string, HTMLDivElement>>(new Map());
+  // "Area de transferencia" da mesa: guarda uma copia do item selecionado
+  // (Ctrl+C) para colar (Ctrl+V) exatamente igual, com um leve deslocamento.
+  const clipboardRef = useRef<PlacedItem | null>(null);
 
   const [items, setItems] = useState<PlacedItem[]>([]);
   // Espelho para os handlers de ponteiro lerem o estado atual sem "stale".
@@ -446,6 +449,63 @@ export function Mesa({
     }
   }
 
+  // Cola (Ctrl+V) uma copia do item guardado no clipboard da mesa, exatamente
+  // com o mesmo tamanho/escala/som/estado — apenas deslocado um pouco para nao
+  // ficar exatamente por cima do original.
+  async function pasteItem(src: PlacedItem) {
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    const itemId = genId();
+    const nx = clamp(src.x + 0.04, 0.03, 0.97);
+    const ny = clamp(src.y + 0.04, 0.03, 0.97);
+    const placed: PlacedItem = { ...src, itemId, x: nx, y: ny };
+    const type = src.media.type;
+
+    // Monta o payload do /show conforme o tipo, copiando os valores do original.
+    let payload: Record<string, unknown>;
+    if (type === "TEXT") {
+      payload = {
+        itemId, streamer: streamerSlug, type: "TEXT", text: src.text ?? "",
+        sticky: true, x: nx, y: ny, scale: src.scaleX, hidden: src.hidden,
+      };
+    } else if (type === "EMBED") {
+      payload = {
+        itemId, streamer: streamerSlug, type: "EMBED", url: src.media.url,
+        sticky: true, x: nx, y: ny, scale: src.scaleX, scaleY: src.scaleY, hidden: src.hidden,
+      };
+    } else if (type === "AUDIO") {
+      payload = {
+        itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
+        volume: src.volume, muted: src.muted, hidden: src.hidden,
+      };
+    } else {
+      payload = {
+        itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
+        x: nx, y: ny, scale: src.scaleX, scaleY: src.scaleY,
+        volume: src.volume, muted: src.muted, hidden: src.hidden,
+      };
+    }
+
+    try {
+      const res = await fetch("/api/trigger/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao colar");
+      }
+      setItems((prev) => [...prev, placed]);
+      setSelectedId(itemId);
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao colar");
+    }
+  }
+
   async function handleRemoveItem(itemId: string) {
     // Otimista: some da mesa na hora.
     setItems((prev) => prev.filter((p) => p.itemId !== itemId));
@@ -661,6 +721,26 @@ export function Mesa({
     function onKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const mod = e.ctrlKey || e.metaKey;
+      // Ctrl/Cmd + C: copia o item selecionado para o clipboard da mesa.
+      if (mod && !e.altKey && (e.key === "c" || e.key === "C")) {
+        const item = getItem(selectedId);
+        if (item) {
+          e.preventDefault();
+          clipboardRef.current = { ...item };
+        }
+        return;
+      }
+      // Ctrl/Cmd + V: cola a copia guardada, igual e um pouco deslocada.
+      if (mod && !e.altKey && (e.key === "v" || e.key === "V")) {
+        if (clipboardRef.current) {
+          e.preventDefault();
+          pasteItem(clipboardRef.current);
+        }
+        return;
+      }
+
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (/^[0-9]$/.test(e.key)) {
@@ -689,7 +769,7 @@ export function Mesa({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, streamerSlug]);
 
   return (
     <section className="panel-section">
