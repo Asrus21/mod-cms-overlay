@@ -122,10 +122,13 @@ export function PainelClient({
   >([]);
   const [importingLogins, setImportingLogins] = useState(false);
 
-  // Carrega o historico de logins — apenas para o master (asrus12).
+  // Carrega o historico de logins — apenas para o master (asrus12). Usa POST,
+  // que ja faz o backfill dos acessos ANTIGOS (rastros no banco) e devolve a
+  // lista completa: antigos (aproximados) + novos (logins registrados de
+  // verdade), juntos. Assim aparece tudo automaticamente, sem clicar em nada.
   useEffect(() => {
     if (!isMaster) return;
-    fetch("/api/me/logins")
+    fetch("/api/me/logins", { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data && Array.isArray(data.logins)) setLogins(data.logins);
@@ -133,22 +136,16 @@ export function PainelClient({
       .catch(() => {});
   }, [isMaster]);
 
-  // Importa acessos anteriores (aproximado): estima o primeiro acesso de quem
-  // ja usava o painel antes do registro de login, a partir de rastros no banco.
+  // Atualiza a lista manualmente (re-roda o backfill + pega novos logins).
   async function importOldLogins() {
     setImportingLogins(true);
     try {
       const res = await fetch("/api/me/logins", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Falha ao importar");
+      if (!res.ok) throw new Error(data.error || "Falha ao atualizar");
       if (Array.isArray(data.logins)) setLogins(data.logins);
-      alert(
-        data.imported > 0
-          ? `${data.imported} acesso(s) anterior(es) importado(s) com data aproximada.`
-          : "Nenhum acesso anterior novo encontrado."
-      );
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Falha ao importar");
+      alert(err instanceof Error ? err.message : "Falha ao atualizar");
     } finally {
       setImportingLogins(false);
     }
@@ -774,11 +771,12 @@ export function PainelClient({
           <h2>Histórico de logins</h2>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem" }}>
             <button onClick={importOldLogins} disabled={importingLogins}>
-              {importingLogins ? "Importando…" : "Importar acessos anteriores"}
+              {importingLogins ? "Atualizando…" : "Atualizar lista"}
             </button>
             <span className="mesa-bg-note" style={{ margin: 0 }}>
-              Estima o primeiro acesso de quem já usava o painel antes do registro
-              — a data fica <strong>aproximada</strong>.
+              Mostra <strong>todos</strong>: acessos antigos (estimados dos rastros
+              no banco, marcados como <strong>aproximado</strong>) e os logins
+              novos registrados — atualiza sozinho ao abrir.
             </span>
           </div>
           {logins.length === 0 ? (
