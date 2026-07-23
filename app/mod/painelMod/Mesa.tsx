@@ -106,6 +106,9 @@ export function Mesa({
   twitchChannel: string;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
+  // Viewport rolavel que envolve o palco — usado para o zoom com Ctrl+scroll
+  // (ajustamos o scroll para o zoom ficar centrado no ponteiro do mouse).
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const lastSentRef = useRef(0);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
@@ -136,6 +139,8 @@ export function Mesa({
   // Zoom da previa da mesa (1x..5x). So aumenta a visualizacao para ajustar
   // itens pequenos com precisao — nao muda o tamanho real no overlay.
   const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
@@ -771,6 +776,48 @@ export function Mesa({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, streamerSlug]);
 
+  // Zoom com Ctrl + scroll do mouse, centrado no ponteiro. Aumentamos o palco
+  // (via zoom) e ajustamos o scroll do viewport para o ponto sob o cursor
+  // continuar sob o cursor. Sem Ctrl, o scroll rola a pagina/viewport normal.
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey && !e.metaKey) return; // so com Ctrl/Cmd
+      e.preventDefault(); // evita o zoom do navegador
+      const el = viewportRef.current;
+      if (!el) return;
+
+      const oldZoom = zoomRef.current;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const newZoom = clamp(oldZoom * factor, 1, 5);
+      if (newZoom === oldZoom) return;
+
+      // Ponto sob o cursor (em px, relativo ao conteudo do palco) antes do zoom.
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const contentX = el.scrollLeft + mouseX;
+      const contentY = el.scrollTop + mouseY;
+
+      // O palco escala linearmente com o zoom; recalculamos o scroll para manter
+      // a mesma fracao do palco sob o cursor.
+      const ratio = newZoom / oldZoom;
+      const newScrollLeft = contentX * ratio - mouseX;
+      const newScrollTop = contentY * ratio - mouseY;
+
+      setZoom(newZoom);
+      requestAnimationFrame(() => {
+        el.scrollLeft = newScrollLeft;
+        el.scrollTop = newScrollTop;
+      });
+    }
+
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <section className="panel-section">
       <h2>Mesa ao vivo</h2>
@@ -963,10 +1010,10 @@ export function Mesa({
             Resetar
           </button>
         )}
-        <span className="mesa-audio-note">só aumenta a visualização (não afeta o overlay)</span>
+        <span className="mesa-audio-note">Ctrl + scroll do mouse também dá zoom (centrado no ponteiro). Só aumenta a visualização (não afeta o overlay).</span>
       </div>
 
-      <div className="mesa-viewport">
+      <div className="mesa-viewport" ref={viewportRef}>
         <div
           ref={stageRef}
           className="mesa-stage"
