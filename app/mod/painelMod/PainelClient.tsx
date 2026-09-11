@@ -63,38 +63,57 @@ export function PainelClient({
   twitchChannel: string;
 }) {
   const router = useRouter();
-  // Streamer alvo: o overlay e por streamer. O mod escolhe UM streamer que ele
-  // modera (lista vinda da Twitch); tudo o que ele colocar vai para o overlay
-  // desse streamer. A mesa e individual por streamer (os itens de um nao
+  // Streamer alvo: o overlay e por streamer. A lista traz a MESA DO PROPRIO
+  // usuario (primeira, marcada com `self`) + os canais que ele modera na Twitch
+  // + os que lhe deram acesso. Tudo o que ele colocar vai para o overlay do
+  // streamer escolhido. A mesa e individual por streamer (os itens de um nao
   // aparecem no outro; ao voltar, continuam la). O master (asrus12) tambem pode
   // buscar qualquer streamer.
-  const [streamer, setStreamer] = useState<{ slug: string; name: string } | null>(null);
-  const [moderated, setModerated] = useState<{ slug: string; name: string }[]>([]);
+  type StreamerEntry = { slug: string; name: string; self?: boolean };
+  const [streamer, setStreamer] = useState<StreamerEntry | null>(null);
+  const [moderated, setModerated] = useState<StreamerEntry[]>([]);
   const [loadingStreamers, setLoadingStreamers] = useState(true);
   const [streamerQuery, setStreamerQuery] = useState("");
 
   useEffect(() => {
-    let lastSlug: string | null = null;
+    // Ultimo streamer escolhido. Guardamos slug + nome ("streamerAtual") para
+    // conseguir restaurar tambem uma busca livre do master (que nao esta na
+    // lista); a chave antiga ("streamerAtualSlug") continua sendo lida.
+    let last: { slug: string; name: string } | null = null;
     try {
-      lastSlug = localStorage.getItem("streamerAtualSlug");
+      const raw = localStorage.getItem("streamerAtual");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { slug?: string; name?: string };
+        if (parsed?.slug) last = { slug: parsed.slug, name: parsed.name || parsed.slug };
+      }
+      if (!last) {
+        const legacy = localStorage.getItem("streamerAtualSlug");
+        if (legacy) last = { slug: legacy, name: legacy };
+      }
     } catch {
       // ignora
     }
-    // Canais que o mod modera (da Twitch, salvos no login).
+    // Mesa do proprio usuario + canais que ele modera (da Twitch, salvos no
+    // login) + canais cuja mesa lhe deram acesso.
     fetch("/api/me/streamers")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
-        const list: { slug: string; name: string }[] = (data.streamers || []).map(
-          (s: { login: string; name: string }) => ({ slug: s.login, name: s.name })
+        const list: StreamerEntry[] = (data.streamers || []).map(
+          (s: { login: string; name: string; self?: boolean }) => ({
+            slug: s.login,
+            name: s.name,
+            self: Boolean(s.self),
+          })
         );
         setModerated(list);
-        // Restaura o ultimo streamer escolhido (se ainda estiver na lista, ou
-        // se for master — que pode ter escolhido qualquer um).
-        if (lastSlug) {
-          const found = list.find((s) => s.slug === lastSlug);
-          if (found) setStreamer(found);
-        }
+        // Restaura o ultimo streamer escolhido. Se ele nao estiver na lista,
+        // so o master mantem a escolha (busca livre). Na primeira vez — ou se a
+        // escolha antiga nao vale mais — ja abre na mesa do proprio usuario.
+        const found = last ? list.find((s) => s.slug === last!.slug) : undefined;
+        const freeSearch = !found && last && data.master ? last : null;
+        const initial = found ?? freeSearch ?? list.find((s) => s.self);
+        if (initial) setStreamer(initial);
       })
       .finally(() => setLoadingStreamers(false));
   }, []);
@@ -169,11 +188,15 @@ export function PainelClient({
     };
   }, []);
 
-  // Define o streamer atual (escolhido da lista de moderados). Guarda so o slug
-  // do ultimo escolhido para restaurar ao recarregar.
-  function pickStreamer(entry: { slug: string; name: string }) {
+  // Define o streamer atual (escolhido da lista). Guarda slug + nome do ultimo
+  // escolhido para restaurar ao recarregar.
+  function pickStreamer(entry: StreamerEntry) {
     setStreamer(entry);
     try {
+      localStorage.setItem(
+        "streamerAtual",
+        JSON.stringify({ slug: entry.slug, name: entry.name })
+      );
       localStorage.setItem("streamerAtualSlug", entry.slug);
     } catch {
       // ignora
@@ -508,8 +531,9 @@ export function PainelClient({
       <section className="panel-section">
         <h2>Streamer</h2>
         <p>
-          Escolha <strong>um</strong> streamer que você modera. Tudo o que você
-          colocar vai para o <strong>overlay dele</strong>. A mesa é{" "}
+          A primeira da lista é a <strong>sua própria mesa</strong> (o overlay do
+          seu canal). Você também pode escolher um streamer que modera. Tudo o
+          que você colocar vai para o <strong>overlay dele</strong>. A mesa é{" "}
           <strong>individual por streamer</strong> — ao trocar, os itens do outro
           somem; ao voltar, continuam lá.
         </p>
@@ -517,21 +541,32 @@ export function PainelClient({
         {loadingStreamers ? (
           <p className="mesa-bg-note">Carregando seus streamers…</p>
         ) : moderated.length > 0 ? (
-          <div className="streamer-list">
-            {moderated.map((s) => (
-              <button
-                key={s.slug}
-                className={`streamer-item${streamer?.slug === s.slug ? " selected" : ""}`}
-                onClick={() => pickStreamer(s)}
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="streamer-list">
+              {moderated.map((s) => (
+                <button
+                  key={s.slug}
+                  className={`streamer-item${streamer?.slug === s.slug ? " selected" : ""}`}
+                  onClick={() => pickStreamer(s)}
+                >
+                  {s.name}
+                  {s.self && <span className="streamer-self">sua mesa</span>}
+                </button>
+              ))}
+            </div>
+            {moderated.length === 1 && moderated[0].self && (
+              <p className="mesa-bg-note">
+                Por enquanto só a sua mesa: você ainda não modera nenhum canal na
+                Twitch (ou a lista não carregou).
+                {isMaster
+                  ? " Use a busca abaixo."
+                  : " Peça para o streamer te dar mod e faça login de novo."}
+              </p>
+            )}
+          </>
         ) : (
           <p className="mesa-bg-note">
-            Você ainda não modera nenhum canal na Twitch (ou a lista não carregou).
-            {isMaster ? " Use a busca abaixo." : " Peça para o streamer te dar mod e faça login de novo."}
+            Nenhuma mesa disponível (a lista não carregou). Tente fazer login de novo.
           </p>
         )}
 
@@ -674,6 +709,10 @@ export function PainelClient({
 
       <section className="panel-section">
         <h2>Disparar / Limpar</h2>
+        <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+          Esta é a <strong>sua biblioteca</strong>: só você vê as mídias que
+          cadastrou. O que outras pessoas enviam fica só com elas.
+        </p>
         <button className="danger" onClick={handleClear} disabled={clearing}>
           {clearing ? "Limpando..." : "Limpar overlay agora"}
         </button>
@@ -726,12 +765,20 @@ export function PainelClient({
               </div>
             </div>
           ))}
-          {media.length === 0 && <p>Nenhuma midia encontrada.</p>}
+          {media.length === 0 &&
+            (query || typeFilter ? (
+              <p>Nenhuma mídia sua com esse filtro.</p>
+            ) : (
+              <p>Nenhuma mídia sua ainda. Cadastre uma abaixo.</p>
+            ))}
         </div>
       </section>
 
       <section className="panel-section">
         <h2>Cadastrar nova midia</h2>
+        <p className="mesa-bg-note" style={{ marginTop: 0 }}>
+          A mídia entra na <strong>sua biblioteca</strong> — ninguém mais a vê.
+        </p>
         <form
           onSubmit={handleUpload}
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}

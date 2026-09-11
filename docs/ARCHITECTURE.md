@@ -21,7 +21,11 @@ estrutura do sistema.
 Aplicação web acessível apenas por usuários autenticados com permissão de
 moderador no canal. É por onde o mod:
 
-- Visualiza a biblioteca de mídias já cadastradas (imagens, gifs, vídeos)
+- Escolhe a mesa em que vai trabalhar: a **própria** (o overlay do canal dele,
+  sempre disponível e primeira da lista), um canal que ele modera na Twitch ou
+  um canal cuja mesa lhe deram acesso
+- Visualiza a **própria** biblioteca de mídias já cadastradas (imagens, gifs,
+  vídeos) — a biblioteca é privada por usuário
 - Busca e filtra mídias por tag, tipo ou nome
 - Envia (upload) novas mídias para a biblioteca
 - Dispara uma mídia para aparecer no overlay, com duração configurável
@@ -51,7 +55,8 @@ Camada intermediária que:
 
 - Autentica e autoriza cada ação (confirma que quem está chamando é
   realmente um mod do canal)
-- Gerencia a biblioteca de mídias (cadastro, metadados, tags)
+- Gerencia a biblioteca de mídias (cadastro, metadados, tags), sempre recortada
+  pelo dono: listar, disparar e excluir só alcançam as mídias do próprio usuário
 - Recebe os comandos do painel (mostrar mídia, limpar tela)
 - Publica esses comandos na camada de tempo real, para que o overlay reaja
 - Registra um log de auditoria de cada ação (quem disparou o quê e quando)
@@ -71,7 +76,8 @@ Armazena três tipos de informação:
 
 - **Cadastro de mods**: quem tem permissão de usar o painel
 - **Biblioteca de mídias**: metadados de cada imagem/gif/vídeo (não o
-  arquivo em si — isso fica em um serviço de armazenamento de arquivos)
+  arquivo em si — isso fica em um serviço de armazenamento de arquivos),
+  com o dono (quem cadastrou) em cada registro: cada usuário só enxerga os seus
 - **Log de disparos**: histórico de auditoria de cada ação realizada
 
 ### 2.6 Armazenamento de arquivos

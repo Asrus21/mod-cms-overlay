@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishShowMedia } from "@/lib/realtime";
 import { modSlug, streamerSlug } from "@/lib/accounts";
+import { isMediaOwner } from "@/lib/media-access";
 import { ActionType } from "@prisma/client";
 
 const MIN_DURATION_MS = 1000;
@@ -11,6 +12,21 @@ const MAX_DURATION_MS = 5 * 60 * 1000;
 function clamp(v: number, min: number, max: number): number {
   if (Number.isNaN(v)) return min;
   return Math.min(max, Math.max(min, v));
+}
+
+// Este item ja esta na mesa deste mod apontando para esta midia? Usado para
+// nao quebrar itens antigos, de quando a biblioteca era compartilhada entre
+// todos os mods.
+async function isOnOwnMesa(itemId: string, owner: string, mediaId: string): Promise<boolean> {
+  try {
+    const existing = await prisma.overlayState.findFirst({
+      where: { id: itemId, owner, mediaId },
+    });
+    return Boolean(existing);
+  } catch {
+    // Tabela pode nao existir ainda; trata como "nao esta na mesa".
+    return false;
+  }
 }
 
 // POST /api/trigger/show — cenario "mostrar midia" (secao 3), passos 3-5:
@@ -107,6 +123,13 @@ export async function POST(request: NextRequest) {
   } else {
     const media = await prisma.media.findUnique({ where: { id: body.mediaId } });
     if (!media) {
+      return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
+    }
+    // Biblioteca privada por usuario: so o dono da midia pode dispara-la. A
+    // unica excecao e um item que JA esta na mesa deste mod (colocado quando a
+    // biblioteca ainda era compartilhada) — continua podendo ser movido,
+    // redimensionado, etc.
+    if (!isMediaOwner(media.createdBy, session.name) && !(await isOnOwnMesa(itemId, owner, media.id))) {
       return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
     }
     mediaId = media.id;
