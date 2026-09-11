@@ -1298,6 +1298,24 @@ button:disabled {
   color: #fff;
 }
 
+/* Selo "sua mesa": marca o proprio canal de quem esta logado. */
+.streamer-self {
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.22);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+.streamer-item.selected .streamer-self {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
 /* Tema claro */
 :root[data-theme="light"] .streamer-item {
   background: #f4f6fa;

@@ -79,17 +79,21 @@ model LoginHistory {
 
 // Biblioteca de midias (secao 2.5): apenas metadados; o binario fica no
 // armazenamento de arquivos (Vercel Blob), aqui guardamos so a URL.
+// A biblioteca e PRIVADA POR USUARIO: cada um so ve (dispara/exclui) o que ele
+// mesmo cadastrou. `createdBy` = login da Twitch de quem cadastrou (minusculo)
+// e e o dono da midia.
 model Media {
   id        String    @id @default(cuid())
   name      String
   type      MediaType
   url       String
   tags      String[]  @default([])
-  createdBy String // nome do mod que cadastrou (self-identificado no login)
+  createdBy String // login da Twitch do dono da midia (quem cadastrou)
   createdAt DateTime  @default(now())
 
   @@index([type])
   @@index([tags])
+  @@index([createdBy])
 }
 
 // Estado atual do overlay (linha unica, id = "current"). Serve para o
@@ -132,4 +136,5 @@ model AuditLog {
   createdAt  DateTime   @default(now())
 
   @@index([createdAt])
+  @@index([actor])
 }

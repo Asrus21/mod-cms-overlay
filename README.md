@@ -123,12 +123,21 @@ Pronto: o app sobe e as tabelas são criadas no Neon no build.
 
 1. Abrem `https://SEU-APP.vercel.app/mod/painelMod`.
 2. Entram com **o próprio nome** + a **senha** (`MOD_ACCESS_KEY`) que você passou.
-3. **Enviar mídia:** escolhem arquivo (imagem, gif, vídeo ou áudio). Se deixarem
+3. **Escolher a mesa:** a primeira da lista é sempre a **mesa do próprio
+   usuário** (o overlay do canal dele), marcada com o selo *sua mesa*. Depois
+   vêm os canais que ele modera na Twitch e os que lhe deram acesso.
+4. **Enviar mídia:** escolhem arquivo (imagem, gif, vídeo ou áudio). Se deixarem
    marcado *"Mostrar no overlay assim que enviar"*, já aparece na hora.
-4. **Disparar da biblioteca:** clicam em **Mostrar** em qualquer mídia já salva.
-5. **Limpar:** o botão *"Limpar overlay agora"* remove na hora o que estiver na
+5. **Disparar da biblioteca:** clicam em **Mostrar** em qualquer mídia já salva.
+6. **Limpar:** o botão *"Limpar overlay agora"* remove na hora o que estiver na
    tela (tem prioridade sobre qualquer exibição em andamento).
-6. Cada ação fica registrada no **Histórico** (quem, o quê, quando).
+7. Cada ação fica registrada no **Histórico** (quem, o quê, quando).
+
+**A biblioteca é privada por usuário.** Cada pessoa só vê, dispara e exclui as
+mídias que ela mesma cadastrou — o que um usuário envia não aparece para mais
+ninguém (nem para outros mods do mesmo streamer, nem para o master). A regra
+vale no backend: listar, disparar e excluir mídia de outra pessoa devolve
+*"Mídia não encontrada"*.
 
 O nome que o mod digita no login é o que aparece no histórico de auditoria.
 
