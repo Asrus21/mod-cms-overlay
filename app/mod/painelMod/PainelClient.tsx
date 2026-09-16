@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Pusher from "pusher-js";
 import { streamerSlug } from "@/lib/slug";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
@@ -659,6 +660,13 @@ export function PainelClient({
           </p>
         )}
       </section>
+
+      {/* Atalho para a tela exclusiva: a mesma mesa ocupando a tela inteira. */}
+      <p style={{ margin: "0 0 0.75rem" }}>
+        <Link className="canvas-open-link" href="/mod/painelMod/canvas">
+          ⛶ Abrir a mesa em tela cheia
+        </Link>
+      </p>
 
       <Mesa
         media={media}

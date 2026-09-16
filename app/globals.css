@@ -1393,3 +1393,225 @@ button:disabled {
   font-style: italic;
   font-size: 0.85em;
 }
+
+/* ===================================================================
+   Tela exclusiva da mesa (/mod/painelMod/canvas)
+   O palco ocupa a tela inteira e os controles viram paineis flutuantes
+   por cima — mesmo modelo do canvas do Pogly.
+   =================================================================== */
+.canvas-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #07080c;
+}
+
+/* O palco preenche a tela; no zoom 1x ele cabe inteiro, e acima disso o
+   viewport rola (o Ctrl+scroll continua centrando no ponteiro). */
+.canvas-root .mesa-viewport {
+  position: fixed;
+  inset: 0;
+  max-height: none;
+  overflow: auto;
+  border-radius: 0;
+  display: grid;
+}
+.canvas-root .mesa-stage {
+  margin: auto; /* centraliza sem cortar quando maior que a tela */
+  width: calc(var(--zoom, 1) * min(100vw, (100vh - 150px) * 16 / 9));
+  border-radius: 0;
+}
+
+/* Paineis flutuantes ------------------------------------------------ */
+.canvas-topbar,
+.canvas-panel,
+.canvas-toolbar {
+  position: fixed;
+  z-index: 20;
+  background: rgba(16, 18, 26, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.canvas-topbar {
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+.canvas-back {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.canvas-back:hover { opacity: 1; }
+.canvas-streamer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.canvas-streamer > span { opacity: 0.7; }
+
+.canvas-panel {
+  top: 70px;
+  bottom: 96px;
+  width: 300px;
+  padding: 0.75rem;
+  overflow: auto;
+}
+.canvas-panel-left { left: 12px; }
+.canvas-panel-right { right: 12px; }
+
+.canvas-panel-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.canvas-toolbar {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  max-width: min(820px, calc(100vw - 660px));
+}
+/* Dentro da barra, as linhas de controle ficam compactas. */
+.canvas-toolbar .mesa-controls { margin: 0; }
+.canvas-toolbar .mesa-bg-note { display: none; }
+
+/* Lista de elementos ------------------------------------------------ */
+.canvas-elements {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.canvas-el {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+}
+.canvas-el.selected {
+  border-color: #7c5cff;
+  background: rgba(124, 92, 255, 0.14);
+}
+.canvas-el.hidden { opacity: 0.45; }
+.canvas-el-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  cursor: pointer;
+  font: inherit;
+}
+.canvas-el-key {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+.canvas-el-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+}
+.canvas-el > button:not(.canvas-el-pick) {
+  flex: none;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.35rem 0.4rem;
+  opacity: 0.75;
+}
+.canvas-el > button:not(.canvas-el-pick):hover { opacity: 1; }
+.canvas-empty {
+  opacity: 0.55;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.2rem;
+}
+
+/* Em telas estreitas os paineis laterais viram faixas menores. */
+@media (max-width: 1100px) {
+  .canvas-panel { width: 210px; }
+  .canvas-toolbar { max-width: calc(100vw - 480px); }
+}
+
+/* Atalho no painel para abrir a mesa em tela cheia. */
+.canvas-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 92, 255, 0.5);
+  background: rgba(124, 92, 255, 0.12);
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.canvas-open-link:hover { background: rgba(124, 92, 255, 0.22); }
+
+/* Dentro dos paineis flutuantes, as linhas de controle (que na pagina do
+   painel sao horizontais e largas) empilham e cabem na largura do painel. */
+.canvas-panel * { min-width: 0; }
+.canvas-panel .mesa-bg-row,
+.canvas-panel .mesa-zoom-row,
+.canvas-panel .mesa-audio-row,
+.canvas-panel .mesa-bg-label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem;
+  max-width: 100%;
+}
+.canvas-panel select,
+.canvas-panel input[type="range"],
+.canvas-panel input[type="file"],
+.canvas-panel button {
+  width: 100%;
+  max-width: 100%;
+}
+.canvas-panel .mesa-bg-note,
+.canvas-panel .mesa-audio-note {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: normal;
+  opacity: 0.7;
+  margin: 0;
+}
+.canvas-panel .obs-help { font-size: 0.78rem; }
+
+/* Barra de ferramentas: campos ocupam a largura toda da barra. */
+.canvas-toolbar .mesa-controls { flex-wrap: nowrap; }
+.canvas-toolbar .mesa-controls input { flex: 1 1 auto; min-width: 0; }

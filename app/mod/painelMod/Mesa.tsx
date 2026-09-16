@@ -95,6 +95,7 @@ export function Mesa({
   vdoRoom,
   vdoPassword,
   twitchChannel,
+  fullscreen = false,
 }: {
   media: Media[];
   modSlug: string;
@@ -104,6 +105,8 @@ export function Mesa({
   vdoRoom: string;
   vdoPassword: string;
   twitchChannel: string;
+  // true = tela exclusiva (palco em tela cheia + paineis flutuantes).
+  fullscreen?: boolean;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   // Viewport rolavel que envolve o palco — usado para o zoom com Ctrl+scroll
@@ -818,18 +821,11 @@ export function Mesa({
     return () => vp.removeEventListener("wheel", onWheel);
   }, []);
 
-  return (
-    <section className="panel-section">
-      <h2>Mesa ao vivo</h2>
-      <p>
-        Coloque <strong>quantas mídias quiser</strong> (ou <strong>texto</strong>) — ficam
-        juntas na tela. Clique numa para selecionar e <strong>arraste com o mouse</strong>.
-        Para redimensionar: <strong>cantos</strong> ajustam largura e altura,{" "}
-        <strong>laterais</strong> só a largura, <strong>topo/base</strong> só a altura.
-        Os itens entram <strong>ocultos</strong> (aparecem esmaecidos aqui): clique em 👁
-        para mostrar no overlay, e ✕ para remover. O OBS acompanha em tempo real.
-      </p>
-
+  // --- Blocos de UI reaproveitados nos dois modos (secao do painel e tela
+  // exclusiva em tela cheia). A logica de interacao e a mesma; muda so o
+  // arranjo: no modo tela cheia eles viram paineis flutuantes sobre o palco.
+  const addControls = (
+    <>
       <div className="mesa-controls">
         <select value={pickId} onChange={(e) => setPickId(e.target.value)}>
           <option value="">Escolha uma mídia…</option>
@@ -903,7 +899,11 @@ export function Mesa({
           Escolha um <strong>streamer</strong> na seção acima para começar.
         </p>
       )}
+    </>
+  );
 
+  const bgControls = (
+    <>
       <div className="mesa-bg-row">
         <label className="mesa-bg-label">
           Fundo da mesa (guia para posicionar)
@@ -966,8 +966,11 @@ export function Mesa({
           )}
         </p>
       )}
+    </>
+  );
 
-      {selected && (selected.media.type === "VIDEO" || selected.media.type === "AUDIO") && (
+  const audioControls =
+    selected && (selected.media.type === "VIDEO" || selected.media.type === "AUDIO") ? (
         <div className="mesa-audio-row">
           <button
             className="mesa-mute"
@@ -992,8 +995,9 @@ export function Mesa({
           </span>
           <span className="mesa-audio-note">som espelhado no OBS</span>
         </div>
-      )}
+    ) : null;
 
+  const zoomControls = (
       <div className="mesa-zoom-row">
         <span>Zoom</span>
         <input
@@ -1012,7 +1016,9 @@ export function Mesa({
         )}
         <span className="mesa-audio-note">Ctrl + scroll do mouse também dá zoom (centrado no ponteiro). Só aumenta a visualização (não afeta o overlay).</span>
       </div>
+  );
 
+  const stage = (
       <div className="mesa-viewport" ref={viewportRef}>
         <div
           ref={stageRef}
@@ -1225,6 +1231,91 @@ export function Mesa({
         )}
         </div>
       </div>
+  );
+
+  // Lista dos elementos que estao na mesa — painel flutuante do modo tela
+  // cheia (mesmo espirito do painel "elements" do Pogly): clicar seleciona,
+  // e cada linha tem mostrar/ocultar e remover. O numero a esquerda e o
+  // atalho de teclado daquele item (1..9, 0).
+  const elementsList = (
+    <ul className="canvas-elements">
+      {items.map((it, i) => {
+        const name =
+          it.media.type === "TEXT" ? it.text || "(texto vazio)" : it.media.name || "(sem nome)";
+        return (
+          <li
+            key={it.itemId}
+            className={`canvas-el${it.itemId === selectedId ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+          >
+            <button
+              className="canvas-el-pick"
+              onClick={() => setSelectedId(it.itemId)}
+              title="Selecionar na mesa"
+            >
+              <span className="canvas-el-key">{i < 9 ? i + 1 : i === 9 ? 0 : "·"}</span>
+              <span className="canvas-el-name">{name}</span>
+            </button>
+            <button
+              onClick={() => toggleHidden(it)}
+              title={it.hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
+              aria-label={it.hidden ? "Mostrar" : "Ocultar"}
+            >
+              {it.hidden ? "🙈" : "👁"}
+            </button>
+            <button
+              onClick={() => handleRemoveItem(it.itemId)}
+              title="Remover da mesa"
+              aria-label="Remover"
+            >
+              ✕
+            </button>
+          </li>
+        );
+      })}
+      {items.length === 0 && <li className="canvas-empty">Nenhum elemento na mesa ainda.</li>}
+    </ul>
+  );
+
+  // Tela exclusiva: o palco ocupa a tela toda e os controles viram paineis
+  // flutuantes por cima, como no canvas do Pogly.
+  if (fullscreen) {
+    return (
+      <div className="canvas-root">
+        {stage}
+
+        <aside className="canvas-panel canvas-panel-left">
+          <h3 className="canvas-panel-title">elementos</h3>
+          {elementsList}
+        </aside>
+
+        <aside className="canvas-panel canvas-panel-right">
+          <h3 className="canvas-panel-title">ajustes</h3>
+          {audioControls}
+          {bgControls}
+          {zoomControls}
+        </aside>
+
+        <div className="canvas-toolbar">{addControls}</div>
+      </div>
+    );
+  }
+
+  return (
+    <section className="panel-section">
+      <h2>Mesa ao vivo</h2>
+      <p>
+        Coloque <strong>quantas mídias quiser</strong> (ou <strong>texto</strong>) — ficam
+        juntas na tela. Clique numa para selecionar e <strong>arraste com o mouse</strong>.
+        Para redimensionar: <strong>cantos</strong> ajustam largura e altura,{" "}
+        <strong>laterais</strong> só a largura, <strong>topo/base</strong> só a altura.
+        Os itens entram <strong>ocultos</strong> (aparecem esmaecidos aqui): clique em 👁
+        para mostrar no overlay, e ✕ para remover. O OBS acompanha em tempo real.
+      </p>
+      {addControls}
+      {bgControls}
+      {audioControls}
+      {zoomControls}
+      {stage}
     </section>
   );
 }
