@@ -493,6 +493,9 @@ a {
   overflow: auto;
   max-height: 75vh;
   border-radius: 10px;
+  /* Margem pequena no uso normal — o palco fica quase do tamanho todo. */
+  padding: 6%;
+  transition: padding 0.18s ease;
 }
 
 .mesa-zoom-row {
@@ -518,7 +521,10 @@ a {
   background: #0b0d12
     linear-gradient(0deg, transparent 24px, #141821 25px) 0 0 / 100% 25px,
     linear-gradient(90deg, transparent 24px, #141821 25px) 0 0 / 25px 100%;
-  overflow: hidden;
+  /* NAO corta: itens podem ser estacionados fora da tela (lib/stage.ts) e o
+     mod precisa ve-los para arrastar de volta. O overlay do OBS
+     (.overlay-root) continua com overflow:hidden — la o que sai some mesmo. */
+  overflow: visible;
   touch-action: none;
   user-select: none;
 }
@@ -1421,7 +1427,8 @@ button:disabled {
 }
 .canvas-root .mesa-stage {
   margin: auto; /* centraliza sem cortar quando maior que a tela */
-  width: calc(var(--zoom, 1) * min(100vw, (100vh - 150px) * 16 / 9));
+  /* 100% = caixa de conteudo do viewport (ja sem o padding da margem). */
+  width: calc(var(--zoom, 1) * min(100%, (100vh - 150px) * 16 / 9));
   border-radius: 0;
 }
 
@@ -1541,6 +1548,10 @@ button:disabled {
   opacity: 0.8;
 }
 .canvas-el-name {
+  /* flex:1 e obrigatorio: `.canvas-panel * { min-width: 0 }` (que impede os
+     controles de vazarem do painel) deixaria este span colapsar para largura
+     zero, escondendo o nome do elemento. */
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1600,8 +1611,18 @@ button:disabled {
 }
 .canvas-panel select,
 .canvas-panel input[type="range"],
-.canvas-panel input[type="file"],
-.canvas-panel button {
+.canvas-panel input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+}
+/* So os botoes dos CONTROLES ocupam a largura toda. Pegar `.canvas-panel
+   button` inteiro atingia tambem os botoes das listas de elementos e de
+   cenas: cada um queria 100% da linha, espremendo o nome do item ate a
+   largura zero (o nome sumia da lista). */
+.canvas-panel .mesa-bg-row button,
+.canvas-panel .mesa-zoom-row button,
+.canvas-panel .mesa-audio-row button,
+.canvas-panel .mesa-controls button {
   width: 100%;
   max-width: 100%;
 }
@@ -1696,4 +1717,35 @@ button:disabled {
   border: 1px solid rgba(239, 68, 68, 0.35);
   font-size: 0.8rem;
   line-height: 1.4;
+}
+
+/* Item estacionado fora da area visivel: continua na mesa, mas NAO aparece na
+   live (o overlay corta). Fica esmaecido e tracejado para o mod nao confundir
+   com um item no ar. */
+.mesa-item.offstage,
+.mesa-audio-badge.offstage {
+  opacity: 0.4;
+  outline: 2px dashed rgba(255, 255, 255, 0.5);
+  outline-offset: 3px;
+}
+.mesa-item.offstage::after {
+  content: "fora da tela";
+  position: absolute;
+  left: 50%;
+  bottom: -1.4rem;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* So quando existe item estacionado fora do palco a margem cresce, para o mod
+   conseguir ver e agarrar o que guardou. Sem item fora, o palco continua
+   grande. 25% = exatamente o alcance de OFFSTAGE (ver lib/stage.ts). */
+.mesa-viewport.tem-offstage {
+  padding: 25%;
 }

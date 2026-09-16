@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
+import { clampPos, isOffstage } from "@/lib/stage";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
 // nao recarrega/pausa quando o resto da mesa re-renderiza.
@@ -802,8 +803,8 @@ export function Mesa({
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return null;
     return {
-      x: clamp((e.clientX - rect.left) / rect.width, 0, 1),
-      y: clamp((e.clientY - rect.top) / rect.height, 0, 1),
+      x: clampPos((e.clientX - rect.left) / rect.width),
+      y: clampPos((e.clientY - rect.top) / rect.height),
     };
   }
 
@@ -829,8 +830,10 @@ export function Mesa({
     const rect = stageRef.current?.getBoundingClientRect();
     if (!d || !rect) return;
     // Move pelo MESMO deslocamento do cursor a partir de onde pegou.
-    const nx = clamp(d.startCX + (e.clientX - d.startClientX) / rect.width, 0, 1);
-    const ny = clamp(d.startCY + (e.clientY - d.startClientY) / rect.height, 0, 1);
+    // Pode passar das bordas: item fora da area visivel fica "guardado" e
+    // some da live sem ser removido (ver lib/stage.ts).
+    const nx = clampPos(d.startCX + (e.clientX - d.startClientX) / rect.width);
+    const ny = clampPos(d.startCY + (e.clientY - d.startClientY) / rect.height);
     const next = patchItem(d.itemId, { x: nx, y: ny });
     if (next) pushMove(next, false);
   }
@@ -936,12 +939,12 @@ export function Mesa({
     if (r.hasX) {
       const signedW = (cx - r.anchorX) * r.dirX; // largura crescendo a partir da ancora
       nx = clamp(signedW, MIN_SCALE, MAX_SCALE);
-      ncx = clamp(r.anchorX + (r.dirX * nx) / 2, 0, 1);
+      ncx = clampPos(r.anchorX + (r.dirX * nx) / 2);
     }
     if (r.hasY) {
       const signedH = (cy - r.anchorY) * r.dirY;
       ny = clamp(signedH, MIN_SCALE, MAX_SCALE);
-      ncy = clamp(r.anchorY + (r.dirY * ny) / 2, 0, 1);
+      ncy = clampPos(r.anchorY + (r.dirY * ny) / 2);
     }
 
     const patch = r.isText
@@ -1370,7 +1373,10 @@ export function Mesa({
   );
 
   const stage = (
-      <div className="mesa-viewport" ref={viewportRef}>
+      <div
+        className={`mesa-viewport${items.some((i) => isOffstage(i.x, i.y)) ? " tem-offstage" : ""}`}
+        ref={viewportRef}
+      >
         <div
           ref={stageRef}
           className="mesa-stage"
@@ -1433,7 +1439,7 @@ export function Mesa({
             return (
               <div
                 key={it.itemId}
-                className={`mesa-audio-badge${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                className={`mesa-audio-badge${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
                 style={{ left: `${it.x * 100}%`, top: `${it.y * 100}%`, transform: "translate(-50%, -50%)" }}
                 onPointerDown={(e) => onItemPointerDown(e, it)}
               >
@@ -1462,7 +1468,7 @@ export function Mesa({
                   if (el) boxEls.current.set(it.itemId, el);
                   else boxEls.current.delete(it.itemId);
                 }}
-                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
                 style={
                   {
                     left: `${it.x * 100}%`,
@@ -1503,7 +1509,7 @@ export function Mesa({
                   if (el) boxEls.current.set(it.itemId, el);
                   else boxEls.current.delete(it.itemId);
                 }}
-                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
                 style={{
                   left: `${it.x * 100}%`,
                   top: `${it.y * 100}%`,
@@ -1543,7 +1549,7 @@ export function Mesa({
                 if (el) boxEls.current.set(it.itemId, el);
                 else boxEls.current.delete(it.itemId);
               }}
-              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
               style={{
                 left: `${it.x * 100}%`,
                 top: `${it.y * 100}%`,
@@ -1607,6 +1613,7 @@ export function Mesa({
           <li
             key={it.itemId}
             className={`canvas-el${it.itemId === selectedId ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+            title={isOffstage(it.x, it.y) ? "Estacionado fora da tela (não aparece na live)" : undefined}
           >
             <button
               className="canvas-el-pick"
@@ -1614,7 +1621,10 @@ export function Mesa({
               title="Selecionar na mesa"
             >
               <span className="canvas-el-key">{i < 9 ? i + 1 : i === 9 ? 0 : "·"}</span>
-              <span className="canvas-el-name">{name}</span>
+              <span className="canvas-el-name">
+                {isOffstage(it.x, it.y) ? "↗ " : ""}
+                {name}
+              </span>
             </button>
             <button
               onClick={() => toggleHidden(it)}

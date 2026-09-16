@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishMove } from "@/lib/realtime";
 import { modSlug, streamerSlug } from "@/lib/accounts";
+import { clampPos } from "@/lib/stage";
 
 // POST /api/trigger/move — atualiza a posicao/escala/som de UM item na tela em
 // tempo real (mesa de controle). Chamada com alta frequencia enquanto o mod
@@ -45,8 +46,9 @@ export async function POST(request: NextRequest) {
   // scaleY nulo/ausente = altura natural (mantem a proporcao, sem distorcer).
   const scaleY =
     typeof body.scaleY === "number" ? clamp(body.scaleY, 0.005, 3) : null;
-  const x = clamp(body.x, 0, 1);
-  const y = clamp(body.y, 0, 1);
+  // Fora de 0..1 = estacionado fora da tela (o overlay corta). Ver lib/stage.
+  const x = clampPos(body.x);
+  const y = clampPos(body.y);
   const scale = clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.005, 3);
   const volume = typeof body.volume === "number" ? clamp(body.volume, 0, 1) : 1;
   const muted = Boolean(body.muted);
