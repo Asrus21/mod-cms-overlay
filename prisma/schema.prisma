@@ -126,6 +126,23 @@ model OverlayState {
   @@index([owner])
 }
 
+// Cena salva: um arranjo nomeado dos itens da mesa (posicao, tamanho, som,
+// visibilidade), para o mod montar uma vez e reaplicar com um clique — ex.:
+// "Inicio", "Intervalo", "Enquete". A cena e por mod E por streamer: cada um
+// so ve e aplica as suas. `items` guarda o snapshot em JSON.
+model Scene {
+  id        String   @id @default(cuid())
+  name      String
+  streamer  String // login do streamer (canal) dono do overlay
+  owner     String // mod dono da cena (mesa individual por mod)
+  items     Json // snapshot dos itens da mesa no momento em que foi salva
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([streamer, owner, name])
+  @@index([streamer, owner])
+}
+
 // Log de disparos (secao 2.5 / 7): auditoria de cada acao sensivel.
 // Guarda um snapshot do nome da midia para o historico nao quebrar caso a
 // midia seja removida depois.

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 
@@ -85,6 +85,23 @@ type DragState = {
   startClientY: number;
 };
 
+// Item de uma cena salva, como vem de /api/scenes/<id> (ja normalizado no
+// servidor por lib/scenes.ts).
+type SceneSnapshotItem = {
+  mediaId: string | null;
+  url: string;
+  name: string;
+  type: MediaType;
+  text?: string;
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number | null;
+  volume: number;
+  muted: boolean;
+  hidden: boolean;
+};
+
 type BgMode = "none" | "twitch" | "obs" | "ref";
 
 export function Mesa({
@@ -149,6 +166,13 @@ export function Mesa({
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+
+  // Cenas salvas: arranjos nomeados da mesa deste mod neste streamer.
+  const [scenes, setScenes] = useState<
+    { id: string; name: string; count: number }[]
+  >([]);
+  const [sceneName, setSceneName] = useState("");
+  const [sceneBusy, setSceneBusy] = useState(false);
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
@@ -527,6 +551,38 @@ export function Mesa({
     }
   }
 
+  // Monta o corpo do /trigger/show que recria um item exatamente como ele
+  // esta (tamanho, escala, som, visibilidade), na posicao pedida. Usado ao
+  // colar (Ctrl+V) e ao aplicar uma cena salva.
+  function showPayloadFor(itemId: string, src: PlacedItem, x: number, y: number) {
+    const type = src.media.type;
+    if (type === "TEXT" || type === "WIDGET") {
+      // O widget e recriado com a MESMA config (inclusive o instante alvo da
+      // contagem), entao a copia marca exatamente o mesmo tempo do original.
+      return {
+        itemId, streamer: streamerSlug, type, text: src.text ?? "",
+        sticky: true, x, y, scale: src.scaleX, hidden: src.hidden,
+      };
+    }
+    if (type === "EMBED") {
+      return {
+        itemId, streamer: streamerSlug, type: "EMBED", url: src.media.url,
+        sticky: true, x, y, scale: src.scaleX, scaleY: src.scaleY, hidden: src.hidden,
+      };
+    }
+    if (type === "AUDIO") {
+      return {
+        itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
+        volume: src.volume, muted: src.muted, hidden: src.hidden,
+      };
+    }
+    return {
+      itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
+      x, y, scale: src.scaleX, scaleY: src.scaleY,
+      volume: src.volume, muted: src.muted, hidden: src.hidden,
+    };
+  }
+
   // Cola (Ctrl+V) uma copia do item guardado no clipboard da mesa, exatamente
   // com o mesmo tamanho/escala/som/estado — apenas deslocado um pouco para nao
   // ficar exatamente por cima do original.
@@ -539,34 +595,7 @@ export function Mesa({
     const nx = clamp(src.x + 0.04, 0.03, 0.97);
     const ny = clamp(src.y + 0.04, 0.03, 0.97);
     const placed: PlacedItem = { ...src, itemId, x: nx, y: ny };
-    const type = src.media.type;
-
-    // Monta o payload do /show conforme o tipo, copiando os valores do original.
-    let payload: Record<string, unknown>;
-    if (type === "TEXT" || type === "WIDGET") {
-      // O widget e copiado com a MESMA config (inclusive o instante alvo da
-      // contagem), entao a copia marca exatamente o mesmo tempo do original.
-      payload = {
-        itemId, streamer: streamerSlug, type, text: src.text ?? "",
-        sticky: true, x: nx, y: ny, scale: src.scaleX, hidden: src.hidden,
-      };
-    } else if (type === "EMBED") {
-      payload = {
-        itemId, streamer: streamerSlug, type: "EMBED", url: src.media.url,
-        sticky: true, x: nx, y: ny, scale: src.scaleX, scaleY: src.scaleY, hidden: src.hidden,
-      };
-    } else if (type === "AUDIO") {
-      payload = {
-        itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
-        volume: src.volume, muted: src.muted, hidden: src.hidden,
-      };
-    } else {
-      payload = {
-        itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
-        x: nx, y: ny, scale: src.scaleX, scaleY: src.scaleY,
-        volume: src.volume, muted: src.muted, hidden: src.hidden,
-      };
-    }
+    const payload = showPayloadFor(itemId, src, nx, ny);
 
     try {
       const res = await fetch("/api/trigger/show", {
@@ -583,6 +612,163 @@ export function Mesa({
       onAction();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao colar");
+    }
+  }
+
+  // --- Cenas salvas ---------------------------------------------------
+  // Uma cena e um arranjo nomeado (posicao/tamanho/som/visibilidade) para o
+  // mod montar uma vez e reaplicar com um clique. Aplicar SUBSTITUI o que
+  // esta na mesa, reusando as rotas de remover e de mostrar.
+
+  const loadScenes = useCallback(async (slug: string) => {
+    if (!slug) {
+      setScenes([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/scenes?streamer=${encodeURIComponent(slug)}`);
+      const data = res.ok ? await res.json() : null;
+      setScenes(Array.isArray(data?.scenes) ? data.scenes : []);
+    } catch {
+      setScenes([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScenes(streamerSlug);
+  }, [streamerSlug, loadScenes]);
+
+  async function saveScene() {
+    const name = sceneName.trim();
+    if (!name || !streamerSlug) return;
+    const jaExiste = scenes.some((s) => s.name.toLowerCase() === name.toLowerCase());
+    if (jaExiste && !confirm(`Já existe uma cena "${name}". Sobrescrever?`)) return;
+
+    setSceneBusy(true);
+    try {
+      // Snapshot do que esta na mesa agora.
+      const snapshot = itemsRef.current.map((it) => ({
+        mediaId: it.media.type === "TEXT" || it.media.type === "WIDGET" || it.media.type === "EMBED"
+          ? null
+          : it.media.id,
+        url: it.media.url,
+        name: it.media.name,
+        type: it.media.type,
+        text: it.text,
+        x: it.x,
+        y: it.y,
+        scaleX: it.scaleX,
+        scaleY: it.scaleY,
+        volume: it.volume,
+        muted: it.muted,
+        hidden: it.hidden,
+      }));
+      const res = await fetch("/api/scenes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamer: streamerSlug, name, items: snapshot }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao salvar a cena");
+      }
+      setSceneName("");
+      await loadScenes(streamerSlug);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao salvar a cena");
+    } finally {
+      setSceneBusy(false);
+    }
+  }
+
+  async function applyScene(id: string, nome: string) {
+    if (!streamerSlug) return;
+    const atuais = itemsRef.current;
+    if (
+      atuais.length > 0 &&
+      !confirm(`Aplicar a cena "${nome}"? Os ${atuais.length} item(ns) que estão na mesa agora serão removidos.`)
+    ) {
+      return;
+    }
+
+    setSceneBusy(true);
+    try {
+      const res = await fetch(`/api/scenes/${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao ler a cena");
+      }
+      const { items: snapshot } = (await res.json()) as { items: SceneSnapshotItem[] };
+
+      // 1) Tira o que esta na mesa (o overlay recebe cada remocao ao vivo).
+      for (const it of atuais) {
+        await fetch("/api/trigger/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId: it.itemId, streamer: streamerSlug }),
+        }).catch(() => {});
+      }
+      setItems([]);
+      setSelectedId("");
+      mediaEls.current.clear();
+      boxEls.current.clear();
+
+      // 2) Recria os itens da cena, cada um com um itemId novo.
+      const novos: PlacedItem[] = [];
+      for (const snap of snapshot) {
+        const itemId = genId();
+        const placed: PlacedItem = {
+          itemId,
+          media: {
+            id: snap.mediaId ?? itemId,
+            name: snap.name || "",
+            type: snap.type,
+            url: snap.url || "",
+            tags: [],
+          },
+          text: snap.text,
+          x: snap.x,
+          y: snap.y,
+          scaleX: snap.scaleX,
+          scaleY: snap.scaleY,
+          volume: snap.volume,
+          muted: snap.muted,
+          hidden: snap.hidden,
+        };
+        const r = await fetch("/api/trigger/show", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(showPayloadFor(itemId, placed, snap.x, snap.y)),
+        });
+        // Um item que nao volta (ex.: midia apagada da biblioteca) e pulado —
+        // o resto da cena continua sendo aplicado.
+        if (r.ok) novos.push(placed);
+      }
+      setItems(novos);
+      if (novos.length < snapshot.length) {
+        alert(
+          `Cena aplicada, mas ${snapshot.length - novos.length} item(ns) não puderam ser recriados (a mídia pode ter sido excluída da biblioteca).`
+        );
+      }
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao aplicar a cena");
+    } finally {
+      setSceneBusy(false);
+    }
+  }
+
+  async function deleteScene(id: string, nome: string) {
+    if (!confirm(`Apagar a cena "${nome}"? Isso não mexe no que está na mesa.`)) return;
+    try {
+      await fetch("/api/scenes", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await loadScenes(streamerSlug);
+    } catch {
+      // silencioso
     }
   }
 
@@ -1009,6 +1195,54 @@ export function Mesa({
     </>
   );
 
+  // Cenas salvas: salvar o arranjo atual e reaplicar com um clique.
+  const sceneControls = (
+    <div className="mesa-scenes">
+      <div className="mesa-controls">
+        <input
+          placeholder="Nome da cena (ex.: Intervalo)…"
+          value={sceneName}
+          onChange={(e) => setSceneName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") saveScene();
+          }}
+          style={{ flex: "1 1 160px" }}
+        />
+        <button
+          onClick={saveScene}
+          disabled={sceneBusy || !sceneName.trim() || !streamerSlug}
+          title="Salva o arranjo que está na mesa agora"
+        >
+          {sceneBusy ? "…" : "💾 Salvar cena"}
+        </button>
+      </div>
+      {scenes.length > 0 && (
+        <ul className="scene-list">
+          {scenes.map((s) => (
+            <li key={s.id} className="scene-item">
+              <button
+                className="scene-apply"
+                onClick={() => applyScene(s.id, s.name)}
+                disabled={sceneBusy}
+                title="Aplicar esta cena (substitui o que está na mesa)"
+              >
+                <span className="scene-name">{s.name}</span>
+                <span className="scene-count">{s.count} item(ns)</span>
+              </button>
+              <button
+                onClick={() => deleteScene(s.id, s.name)}
+                title="Apagar a cena"
+                aria-label="Apagar a cena"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
   const bgControls = (
     <>
       <div className="mesa-bg-row">
@@ -1403,6 +1637,10 @@ export function Mesa({
         <aside className="canvas-panel canvas-panel-left">
           <h3 className="canvas-panel-title">elementos</h3>
           {elementsList}
+          <h3 className="canvas-panel-title" style={{ marginTop: "1rem" }}>
+            cenas
+          </h3>
+          {sceneControls}
         </aside>
 
         <aside className="canvas-panel canvas-panel-right">
@@ -1429,6 +1667,7 @@ export function Mesa({
         para mostrar no overlay, e ✕ para remover. O OBS acompanha em tempo real.
       </p>
       {addControls}
+      {sceneControls}
       {bgControls}
       {audioControls}
       {zoomControls}
