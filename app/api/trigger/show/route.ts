@@ -4,6 +4,7 @@ import { requireMod } from "@/lib/require-mod";
 import { publishShowMedia } from "@/lib/realtime";
 import { modSlug, streamerSlug } from "@/lib/accounts";
 import { clampPos } from "@/lib/stage";
+import { MAX_WIDGET_CODE, isWidgetKind, widgetCodeSize, type WidgetConfig } from "@/lib/widgets";
 import { isMediaOwner } from "@/lib/media-access";
 import { ActionType } from "@prisma/client";
 
@@ -67,7 +68,11 @@ export async function POST(request: NextRequest) {
   // Item "embed" (feed ao vivo do OBS do mod via um relay): carrega uma URL de
   // player http(s) direto, sem midia na biblioteca.
   const isEmbed = body.type === "EMBED";
-  const text = typeof body.text === "string" ? body.text.slice(0, 500) : "";
+  // Texto comum cabe em 500; a config de um widget carrega codigo, entao
+  // precisa de bem mais (o teto real do codigo e MAX_WIDGET_CODE, checado
+  // abaixo).
+  const LIMITE_TEXTO = isWidget ? MAX_WIDGET_CODE + 2000 : 500;
+  const text = typeof body.text === "string" ? body.text.slice(0, LIMITE_TEXTO) : "";
   const embedUrl = typeof body.url === "string" ? body.url.trim() : "";
   if (isEmbed) {
     if (!/^https?:\/\//i.test(embedUrl)) {
@@ -78,15 +83,23 @@ export async function POST(request: NextRequest) {
     }
   } else if (isWidget) {
     // A config precisa ser um JSON com um tipo de widget conhecido.
-    let ok = false;
+    let cfg: WidgetConfig | null = null;
     try {
-      const cfg = JSON.parse(text) as { kind?: string };
-      ok = cfg?.kind === "clock" || cfg?.kind === "countdown" || cfg?.kind === "stopwatch";
+      const parsed = JSON.parse(text) as WidgetConfig;
+      if (parsed && isWidgetKind(parsed.kind)) cfg = parsed;
     } catch {
-      ok = false;
+      cfg = null;
     }
-    if (!ok) {
+    if (!cfg) {
       return NextResponse.json({ error: "Configuracao de widget invalida" }, { status: 400 });
+    }
+    // O codigo do personalizado tem teto: a config viaja no evento de tempo
+    // real, e o Pusher recusa mensagens grandes demais.
+    if (cfg.kind === "custom" && widgetCodeSize(cfg) > MAX_WIDGET_CODE) {
+      return NextResponse.json(
+        { error: `O código do widget passou de ${MAX_WIDGET_CODE} caracteres.` },
+        { status: 400 }
+      );
     }
   } else if (isText) {
     if (!text.trim()) {

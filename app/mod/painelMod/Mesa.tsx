@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
+import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos, isOffstage } from "@/lib/stage";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
@@ -185,6 +186,11 @@ export function Mesa({
   const [widgetKind, setWidgetKind] = useState<WidgetKind>("clock");
   const [widgetLabel, setWidgetLabel] = useState("");
   const [widgetMinutes, setWidgetMinutes] = useState("10");
+  // Widget personalizado: codigo do proprio mod, em abas separadas.
+  const [wAba, setWAba] = useState<"html" | "css" | "js">("html");
+  const [wHtml, setWHtml] = useState('<div id="oi">Olá!</div>');
+  const [wCss, setWCss] = useState("#oi{font:700 48px system-ui;color:#fff}");
+  const [wJs, setWJs] = useState("");
   // Zoom da previa da mesa (1x..5x). So aumenta a visualizacao para ajustar
   // itens pequenos com precisao — nao muda o tamanho real no overlay.
   const [zoom, setZoom] = useState(1);
@@ -470,6 +476,20 @@ export function Mesa({
     const agora = Date.now();
     const cfg: Record<string, unknown> = { kind: widgetKind, withSeconds: true };
     if (widgetLabel.trim()) cfg.label = widgetLabel.trim();
+    if (widgetKind === "custom") {
+      const total = wHtml.length + wCss.length + wJs.length;
+      if (total > MAX_WIDGET_CODE) {
+        alert(`O código passou de ${MAX_WIDGET_CODE} caracteres (está com ${total}).`);
+        return;
+      }
+      if (!wHtml.trim() && !wJs.trim()) {
+        alert("Escreva ao menos o HTML ou o JavaScript do widget.");
+        return;
+      }
+      cfg.html = wHtml;
+      cfg.css = wCss;
+      cfg.js = wJs;
+    }
     if (widgetKind === "countdown") {
       const min = Number(widgetMinutes);
       if (!Number.isFinite(min) || min <= 0) {
@@ -488,8 +508,9 @@ export function Mesa({
       text: content,
       x: 0.5,
       y: 0.5,
-      scaleX: 0.06,
-      scaleY: null,
+      // O personalizado e uma caixa (iframe), nao texto escalado por fonte.
+      scaleX: widgetKind === "custom" ? 0.3 : 0.06,
+      scaleY: widgetKind === "custom" ? 0.17 : null,
       volume: 1,
       muted: false,
       // Entra OCULTO, igual aos demais: so aparece no overlay ao clicar em 👁.
@@ -507,7 +528,8 @@ export function Mesa({
           sticky: true,
           x: 0.5,
           y: 0.5,
-          scale: 0.06,
+          scale: widgetKind === "custom" ? 0.3 : 0.06,
+          ...(widgetKind === "custom" ? { scaleY: 0.17 } : {}),
           hidden: true,
         }),
       });
@@ -1181,10 +1203,9 @@ export function Mesa({
     if (!vp) return;
 
     function onWheel(e: WheelEvent) {
-      // Na tela exclusiva a roda da zoom direto. Dentro do painel ela so faz
-      // zoom com Ctrl/Cmd: la a mesa e uma secao de uma pagina que rola, e
-      // sequestrar a roda prenderia a rolagem da pagina sobre a mesa.
-      if (!fullscreen && !e.ctrlKey && !e.metaKey) return;
+      // A roda SEMPRE da zoom sobre a mesa, nos dois modos. O viewport nao
+      // rola mais (overflow:hidden), entao nao ha rolagem para disputar com
+      // ela; para se deslocar, use o botao do meio.
       e.preventDefault(); // evita o zoom do navegador
       const el = viewportRef.current;
       if (!el) return;
@@ -1216,7 +1237,7 @@ export function Mesa({
 
     vp.addEventListener("wheel", onWheel, { passive: false });
     return () => vp.removeEventListener("wheel", onWheel);
-  }, [fullscreen]);
+  }, []);
 
   // --- Blocos de UI reaproveitados nos dois modos (secao do painel e tela
   // exclusiva em tela cheia). A logica de interacao e a mesma; muda so o
@@ -1294,6 +1315,7 @@ export function Mesa({
             <option value="clock">⏰ Relógio</option>
             <option value="countdown">⏳ Contagem regressiva</option>
             <option value="stopwatch">⏱ Cronômetro</option>
+            <option value="custom">{"</>"} Personalizado (código)</option>
           </select>
           {widgetKind === "countdown" && (
             <input
@@ -1317,6 +1339,49 @@ export function Mesa({
           <button className="primary" onClick={handleAddWidget}>
             Adicionar
           </button>
+
+          {widgetKind === "custom" && (
+            <div className="widget-editor">
+              <div className="widget-abas">
+                {(["html", "css", "js"] as const).map((k) => (
+                  <button
+                    key={k}
+                    className={`widget-aba${wAba === k ? " ativa" : ""}`}
+                    onClick={() => setWAba(k)}
+                  >
+                    {k.toUpperCase()}
+                  </button>
+                ))}
+                <span className="widget-contagem">
+                  {wHtml.length + wCss.length + wJs.length}/{MAX_WIDGET_CODE}
+                </span>
+              </div>
+              <textarea
+                className="widget-codigo"
+                spellCheck={false}
+                value={wAba === "html" ? wHtml : wAba === "css" ? wCss : wJs}
+                onChange={(e) =>
+                  wAba === "html"
+                    ? setWHtml(e.target.value)
+                    : wAba === "css"
+                    ? setWCss(e.target.value)
+                    : setWJs(e.target.value)
+                }
+                placeholder={
+                  wAba === "html"
+                    ? "<div id=\"oi\">Olá!</div>"
+                    : wAba === "css"
+                    ? "#oi { color: #fff }"
+                    : "// roda dentro do widget, isolado do painel"
+                }
+              />
+              <p className="mesa-bg-note" style={{ margin: 0 }}>
+                O código roda <strong>isolado</strong> (iframe sandbox): não alcança o
+                painel, seus cookies nem o overlay. Para dado ao vivo, use{" "}
+                <code>fetch</code> numa API pública.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -1513,10 +1578,9 @@ export function Mesa({
           </button>
         )}
         <span className="mesa-audio-note">
-          {fullscreen
-            ? "Roda do mouse dá zoom (centrado no ponteiro) e o botão do meio arrasta a tela. Abaixo de 1× você enxerga o que está estacionado fora."
-            : "Ctrl + roda do mouse dá zoom (sem Ctrl a página rola normalmente)."}{" "}
-          Só muda a visualização, não afeta o overlay.
+          Roda do mouse dá zoom (centrado no ponteiro) e o botão do meio arrasta a
+          tela. Abaixo de 1× você enxerga o que está estacionado fora. Só muda a
+          visualização, não afeta o overlay.
         </span>
       </div>
   );
