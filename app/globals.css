@@ -1757,3 +1757,92 @@ button:disabled {
 .mesa-stage.alt-remodelar .mesa-audio-badge {
   cursor: nwse-resize;
 }
+
+/* ===================================================================
+   Barra de inserção de elementos (ícones + painel que abre ao clicar)
+   Substitui as quatro linhas de controle empilhadas, que ocupavam boa
+   parte da tela mesmo sem ninguém ir adicionar nada.
+   =================================================================== */
+.mesa-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.mesa-tools {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.mesa-tool {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.mesa-tool:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); }
+.mesa-tool.ativa {
+  background: rgba(124, 92, 255, 0.22);
+  border-color: rgba(124, 92, 255, 0.6);
+}
+.mesa-tool:disabled { opacity: 0.4; cursor: default; }
+
+/* Dica no hover: diz o que o ícone faz (o title do navegador demora e some). */
+.mesa-tool-dica {
+  position: absolute;
+  bottom: calc(100% + 0.4rem);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  background: #0b0d12;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e6e8ee;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 30;
+}
+.mesa-tool:hover .mesa-tool-dica,
+.mesa-tool:focus-visible .mesa-tool-dica { opacity: 1; }
+
+.mesa-tool-painel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 560px;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.mesa-tool-painel.coluna { flex-direction: column; align-items: stretch; }
+.mesa-tool-linha { display: flex; gap: 0.5rem; align-items: center; }
+.mesa-tool-painel input,
+.mesa-tool-painel select { flex: 1 1 auto; min-width: 0; }
+.mesa-tool-painel button { flex: none; }
+
+:root[data-theme="light"] .mesa-tools,
+:root[data-theme="light"] .mesa-tool-painel {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+}
