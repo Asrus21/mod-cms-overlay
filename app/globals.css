@@ -1615,3 +1615,17 @@ button:disabled {
 /* Barra de ferramentas: campos ocupam a largura toda da barra. */
 .canvas-toolbar .mesa-controls { flex-wrap: nowrap; }
 .canvas-toolbar .mesa-controls input { flex: 1 1 auto; min-width: 0; }
+
+/* Widgets (relogio / contagem regressiva / cronometro). Herdam o tamanho da
+   fonte do item de texto, entao escalam pelas mesmas alcas. */
+.widget-value {
+  font-variant-numeric: tabular-nums; /* digitos com largura fixa: nao "pula" */
+}
+.widget-label {
+  opacity: 0.85;
+  font-weight: 500;
+}
+/* Contagem regressiva que chegou a zero. */
+.widget-value.done {
+  color: #ff6b6b;
+}

@@ -13,8 +13,9 @@ import {
   type RemovePayload,
   type ShowMediaPayload,
 } from "@/lib/realtime";
+import { WidgetView, parseWidget } from "../WidgetView";
 
-export type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
+export type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED" | "WIDGET";
 
 export type OverlayItem = {
   itemId: string;
@@ -208,7 +209,9 @@ export function OverlayItems({ items }: { items: OverlayItem[] }) {
       {items.map((it) => {
         if (it.hidden) return null;
 
-        if (it.type === "TEXT") {
+        if (it.type === "TEXT" || it.type === "WIDGET") {
+          // Widget usa o mesmo posicionamento/escala do texto (o tamanho e a
+          // fonte); so o conteudo e vivo, calculado no proprio overlay.
           const style = {
             "--x": it.x,
             "--y": it.y,
@@ -216,7 +219,13 @@ export function OverlayItems({ items }: { items: OverlayItem[] }) {
           } as CSSProperties;
           return (
             <div key={it.itemId} className="overlay-movable text-item" style={style}>
-              <span className="overlay-text">{it.text}</span>
+              <span className="overlay-text">
+                {it.type === "WIDGET" ? (
+                  <WidgetView config={parseWidget(it.text)} />
+                ) : (
+                  it.text
+                )}
+              </span>
             </div>
           );
         }

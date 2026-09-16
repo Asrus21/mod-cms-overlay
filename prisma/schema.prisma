@@ -19,6 +19,9 @@ enum MediaType {
   AUDIO
   TEXT
   EMBED
+  // Widget: item "vivo" (relogio, contagem regressiva, cronometro). A
+  // configuracao viaja no campo `text`, em JSON (ver app/WidgetView.tsx).
+  WIDGET
 }
 
 enum ActionType {

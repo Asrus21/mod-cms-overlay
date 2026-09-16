@@ -57,8 +57,12 @@ export async function POST(request: NextRequest) {
     hidden?: boolean;
   };
 
+  // Item "widget" (relogio/contagem/cronometro): tambem nao tem midia na
+  // biblioteca; o campo `text` carrega a configuracao em JSON.
+  const isWidget = body.type === "WIDGET";
   // Item de texto: nao tem midia na biblioteca; carrega o texto direto.
-  const isText = body.type === "TEXT" || (!body.mediaId && typeof body.text === "string");
+  const isText =
+    !isWidget && (body.type === "TEXT" || (!body.mediaId && typeof body.text === "string"));
   // Item "embed" (feed ao vivo do OBS do mod via um relay): carrega uma URL de
   // player http(s) direto, sem midia na biblioteca.
   const isEmbed = body.type === "EMBED";
@@ -70,6 +74,18 @@ export async function POST(request: NextRequest) {
         { error: "Informe um link http(s) do player (feed ao vivo)" },
         { status: 400 }
       );
+    }
+  } else if (isWidget) {
+    // A config precisa ser um JSON com um tipo de widget conhecido.
+    let ok = false;
+    try {
+      const cfg = JSON.parse(text) as { kind?: string };
+      ok = cfg?.kind === "clock" || cfg?.kind === "countdown" || cfg?.kind === "stopwatch";
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      return NextResponse.json({ error: "Configuracao de widget invalida" }, { status: 400 });
     }
   } else if (isText) {
     if (!text.trim()) {
@@ -111,12 +127,15 @@ export async function POST(request: NextRequest) {
   // Resolve o conteudo do item: biblioteca (midia) ou texto.
   let mediaId: string | null = null;
   let url: string | null = null;
-  let mediaType: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
+  let mediaType: "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED" | "WIDGET";
   let mediaName: string;
   if (isEmbed) {
     mediaType = "EMBED";
     url = embedUrl;
     mediaName = "Feed ao vivo";
+  } else if (isWidget) {
+    mediaType = "WIDGET";
+    mediaName = "Widget";
   } else if (isText) {
     mediaType = "TEXT";
     mediaName = text.slice(0, 40);
@@ -157,7 +176,7 @@ export async function POST(request: NextRequest) {
       mediaId: mediaId ?? "",
       url: url ?? "",
       type: mediaType,
-      text: isText ? text : undefined,
+      text: isText || isWidget ? text : undefined,
       durationMs,
       triggeredAt: Date.now(),
       sticky,
@@ -182,7 +201,7 @@ export async function POST(request: NextRequest) {
     mediaId,
     url,
     type: mediaType,
-    text: isText ? text : null,
+    text: isText || isWidget ? text : null,
     x,
     y,
     scale,
