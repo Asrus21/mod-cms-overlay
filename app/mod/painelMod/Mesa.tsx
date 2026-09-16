@@ -177,6 +177,9 @@ export function Mesa({
   >([]);
   const [sceneName, setSceneName] = useState("");
   const [sceneBusy, setSceneBusy] = useState(false);
+  // Motivo de as cenas estarem indisponiveis (ex.: tabela nao criada no banco).
+  // Sem isto a lista apareceria vazia, como se so nao houvesse cena salva.
+  const [sceneErro, setSceneErro] = useState("");
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
@@ -633,8 +636,10 @@ export function Mesa({
       const res = await fetch(`/api/scenes?streamer=${encodeURIComponent(slug)}`);
       const data = res.ok ? await res.json() : null;
       setScenes(Array.isArray(data?.scenes) ? data.scenes : []);
+      setSceneErro(data?.unavailable ? String(data.reason || "Cenas indisponíveis.") : "");
     } catch {
       setScenes([]);
+      setSceneErro("");
     }
   }, []);
 
@@ -1220,6 +1225,7 @@ export function Mesa({
           {sceneBusy ? "…" : "💾 Salvar cena"}
         </button>
       </div>
+      {sceneErro && <p className="scene-erro">⚠️ {sceneErro}</p>}
       {scenes.length > 0 && (
         <ul className="scene-list">
           {scenes.map((s) => (

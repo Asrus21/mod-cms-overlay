@@ -21,21 +21,42 @@ function pushSchema() {
   execSync("npx --no-install prisma db push --skip-generate", { stdio: "inherit" });
 }
 
-try {
-  pushSchema();
-  console.log("[db-push] schema aplicado.");
-} catch {
-  console.warn("[db-push] 1a tentativa falhou (banco frio?). Aguardando 5s e tentando de novo...");
+// Varias tentativas com espera crescente: uma tabela NOVA que nao e criada
+// aqui so aparece como erro em producao depois, com o build ja verde. Dar mais
+// chances ao banco frio e barato; desistir na primeira e caro.
+const ESPERAS_MS = [5000, 15000, 30000];
+let aplicado = false;
+let ultimoErro;
+
+for (let tentativa = 0; tentativa <= ESPERAS_MS.length; tentativa++) {
   try {
-    sleep(5000);
     pushSchema();
-    console.log("[db-push] schema aplicado na 2a tentativa.");
+    console.log(`[db-push] schema aplicado (tentativa ${tentativa + 1}).`);
+    aplicado = true;
+    break;
   } catch (err) {
-    const msg = err && err.message ? err.message : String(err);
+    ultimoErro = err;
+    const espera = ESPERAS_MS[tentativa];
+    if (espera === undefined) break;
     console.warn(
-      "[db-push] pulado — o build segue normalmente. " +
-        "Se voce mudou o schema, rode `npm run db:push` depois. Motivo: " +
-        msg
+      `[db-push] tentativa ${tentativa + 1} falhou (banco frio?). ` +
+        `Aguardando ${espera / 1000}s...`
     );
+    sleep(espera);
   }
+}
+
+if (!aplicado) {
+  const msg = ultimoErro && ultimoErro.message ? ultimoErro.message : String(ultimoErro);
+  // Continua sem derrubar o deploy (essa e a regra aqui), mas deixa o aviso
+  // grande: um recurso novo pode ir ao ar sem a tabela dele.
+  console.warn(
+    "\n=====================================================================\n" +
+      "[db-push] ATENCAO: o schema NAO foi aplicado apos varias tentativas.\n" +
+      "O build segue, mas QUALQUER TABELA NOVA deste deploy nao existe no\n" +
+      "banco, e o recurso que depende dela vai falhar em producao.\n" +
+      "Correcao: rode `npm run db:push` ou refaca o deploy.\n" +
+      "Motivo: " + msg + "\n" +
+      "=====================================================================\n"
+  );
 }

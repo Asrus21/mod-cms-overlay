@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { modSlug, streamerSlug } from "@/lib/accounts";
 import { sanitizeSceneItems, MAX_SCENE_ITEMS } from "@/lib/scenes";
+import { mensagemDeBanco, tabelaAusente } from "@/lib/db-errors";
 
 // Cenas salvas: arranjos nomeados dos itens da mesa, por mod e por streamer.
 // Salvar/aplicar e sempre no escopo do proprio mod (owner = quem esta logado),
@@ -39,10 +40,14 @@ export async function GET(request: NextRequest) {
     }));
     return NextResponse.json({ scenes });
   } catch (err) {
-    // Tabela pode nao existir ainda (db push nao rodou): trata como "sem cenas"
-    // em vez de quebrar o painel inteiro.
+    // Nao quebra o painel inteiro, mas tambem NAO finge que so nao ha cenas:
+    // devolve o motivo para a UI poder avisar em vez de mostrar lista vazia.
     console.warn("[scenes] falha ao listar:", err instanceof Error ? err.message : err);
-    return NextResponse.json({ scenes: [] });
+    return NextResponse.json({
+      scenes: [],
+      unavailable: true,
+      reason: mensagemDeBanco(err, "As cenas salvas"),
+    });
   }
 }
 
@@ -85,9 +90,9 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true, id: saved.id, name: saved.name, count: items.length });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Falha ao salvar a cena";
-    console.error("[scenes] falha ao salvar:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const message = mensagemDeBanco(err, "As cenas salvas");
+    console.error("[scenes] falha ao salvar:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: message }, { status: tabelaAusente(err) ? 503 : 500 });
   }
 }
 
@@ -107,7 +112,9 @@ export async function DELETE(request: NextRequest) {
     await prisma.scene.deleteMany({ where: { id: body.id, owner } });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Falha ao apagar a cena";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: mensagemDeBanco(err, "As cenas salvas") },
+      { status: tabelaAusente(err) ? 503 : 500 }
+    );
   }
 }

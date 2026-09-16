@@ -1686,3 +1686,14 @@ button:disabled {
 }
 .scene-item > button:not(.scene-apply):hover { opacity: 1; color: #ef4444; }
 :root[data-theme="light"] .scene-item { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.08); }
+
+/* Aviso de cenas indisponiveis (ex.: tabela ausente no banco). */
+.scene-erro {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
