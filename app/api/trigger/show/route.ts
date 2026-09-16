@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { publishShowMedia } from "@/lib/realtime";
 import { modSlug, streamerSlug } from "@/lib/accounts";
+import { clampPos } from "@/lib/stage";
 import { isMediaOwner } from "@/lib/media-access";
 import { ActionType } from "@prisma/client";
 
@@ -158,8 +159,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Posicao (0..1) e tamanho (fracao da largura da tela, 0.02..3).
-  const x = clamp(typeof body.x === "number" ? body.x : 0.5, 0, 1);
-  const y = clamp(typeof body.y === "number" ? body.y : 0.5, 0, 1);
+  // Fora de 0..1 = estacionado fora da tela (o overlay corta). Ver lib/stage.
+  const x = clampPos(typeof body.x === "number" ? body.x : 0.5);
+  const y = clampPos(typeof body.y === "number" ? body.y : 0.5);
   const scale = clamp(typeof body.scale === "number" ? body.scale : 0.5, 0.005, 3);
   // scaleY nulo/ausente = altura natural (mantem a proporcao, sem distorcer).
   const scaleY =
