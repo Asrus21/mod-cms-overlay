@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { modSlug } from "@/lib/accounts";
 import { sanitizeSceneItems } from "@/lib/scenes";
+import { mensagemDeBanco, tabelaAusente } from "@/lib/db-errors";
 
 // GET /api/scenes/<id> — itens de uma cena, para a mesa reconstruir o arranjo.
 // So o dono da cena le a propria cena.
@@ -24,7 +25,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       items: sanitizeSceneItems(scene.items),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Falha ao ler a cena";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: mensagemDeBanco(err, "As cenas salvas") },
+      { status: tabelaAusente(err) ? 503 : 500 }
+    );
   }
 }

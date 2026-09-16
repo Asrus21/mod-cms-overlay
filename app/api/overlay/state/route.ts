@@ -40,8 +40,13 @@ export async function GET(request: NextRequest) {
   const items = rows
     .filter((r) => {
       if (r.expiresAt && r.expiresAt.getTime() < now) return false;
-      // Item de texto nao tem midia/url; midia precisa de url.
-      if (r.type === "TEXT") return Boolean(r.text);
+      // Cada tipo tem o seu "conteudo minimo" — sem ele o item nao renderiza.
+      // Nem todo tipo vem da biblioteca: texto e widget carregam o conteudo em
+      // `text` (no widget, a config em JSON) e o feed ao vivo carrega so a URL
+      // do player. Exigir mediaId deles fazia esses itens sumirem do overlay a
+      // cada recarga do browser source.
+      if (r.type === "TEXT" || r.type === "WIDGET") return Boolean(r.text);
+      if (r.type === "EMBED") return Boolean(r.url);
       return Boolean(r.mediaId && r.url);
     })
     .map((r) => ({
