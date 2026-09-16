@@ -1,0 +1,156 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Mesa } from "../Mesa";
+
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
+
+type Media = {
+  id: string;
+  name: string;
+  type: MediaType;
+  url: string;
+  tags: string[];
+};
+
+type StreamerEntry = { slug: string; name: string; self?: boolean };
+
+// Mesmo dominio canonico usado no painel, para o link do overlay bater com o
+// que os streamers ja tem colado no OBS.
+const PUBLIC_ORIGIN = (
+  process.env.NEXT_PUBLIC_PUBLIC_ORIGIN || "https://asrus.app"
+).replace(/\/+$/, "");
+
+export function CanvasClient({
+  modSlug,
+  vdoRoom,
+  vdoPassword,
+  twitchChannel,
+}: {
+  modSlug: string;
+  vdoRoom: string;
+  vdoPassword: string;
+  twitchChannel: string;
+}) {
+  const [streamer, setStreamer] = useState<StreamerEntry | null>(null);
+  const [lista, setLista] = useState<StreamerEntry[]>([]);
+  const [media, setMedia] = useState<Media[]>([]);
+
+  // Streamer atual: mesma chave do painel, para a tela exclusiva abrir ja no
+  // streamer que o usuario estava usando la (e vice-versa).
+  useEffect(() => {
+    let last: { slug: string; name: string } | null = null;
+    try {
+      const raw = localStorage.getItem("streamerAtual");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { slug?: string; name?: string };
+        if (parsed?.slug) last = { slug: parsed.slug, name: parsed.name || parsed.slug };
+      }
+      if (!last) {
+        const legacy = localStorage.getItem("streamerAtualSlug");
+        if (legacy) last = { slug: legacy, name: legacy };
+      }
+    } catch {
+      // ignora
+    }
+    fetch("/api/me/streamers")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const list: StreamerEntry[] = (data.streamers || []).map(
+          (s: { login: string; name: string; self?: boolean }) => ({
+            slug: s.login,
+            name: s.name,
+            self: Boolean(s.self),
+          })
+        );
+        setLista(list);
+        const found = last ? list.find((s) => s.slug === last!.slug) : undefined;
+        const freeSearch = !found && last && data.master ? last : null;
+        const initial = found ?? freeSearch ?? list.find((s) => s.self);
+        if (initial) setStreamer(initial);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Biblioteca de midias do usuario (para o seletor "Colocar na mesa").
+  useEffect(() => {
+    fetch("/api/media")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.media)) setMedia(data.media);
+      })
+      .catch(() => {});
+  }, []);
+
+  function pick(slug: string) {
+    const entry = lista.find((s) => s.slug === slug);
+    if (!entry) return;
+    setStreamer(entry);
+    try {
+      localStorage.setItem("streamerAtual", JSON.stringify(entry));
+      localStorage.setItem("streamerAtualSlug", entry.slug);
+    } catch {
+      // ignora
+    }
+  }
+
+  const overlayUrl = streamer ? `${PUBLIC_ORIGIN}/overlay/${streamer.slug}` : "";
+
+  async function copyOverlay() {
+    if (!overlayUrl) return;
+    try {
+      await navigator.clipboard.writeText(overlayUrl);
+      alert("Link do overlay copiado! Cole no Browser Source do OBS.");
+    } catch {
+      alert(overlayUrl);
+    }
+  }
+
+  return (
+    <>
+      {/* Barra flutuante do topo: voltar, streamer atual e link do OBS. */}
+      <header className="canvas-topbar">
+        <Link className="canvas-back" href="/mod/painelMod">
+          ← Painel
+        </Link>
+
+        <label className="canvas-streamer">
+          <span>Streamer</span>
+          <select value={streamer?.slug ?? ""} onChange={(e) => pick(e.target.value)}>
+            {!streamer && <option value="">Escolha…</option>}
+            {lista.map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.self ? "★ " : ""}
+                {s.name}
+              </option>
+            ))}
+            {/* Busca livre do master restaurada que nao esta na lista. */}
+            {streamer && !lista.some((s) => s.slug === streamer.slug) && (
+              <option value={streamer.slug}>{streamer.name}</option>
+            )}
+          </select>
+        </label>
+
+        {overlayUrl && (
+          <button onClick={copyOverlay} title={overlayUrl}>
+            📋 Copiar link do OBS
+          </button>
+        )}
+      </header>
+
+      <Mesa
+        fullscreen
+        media={media}
+        modSlug={modSlug}
+        streamerSlug={streamer?.slug ?? ""}
+        streamerName={streamer?.name ?? ""}
+        onAction={() => {}}
+        vdoRoom={vdoRoom}
+        vdoPassword={vdoPassword}
+        twitchChannel={twitchChannel}
+      />
+    </>
+  );
+}
