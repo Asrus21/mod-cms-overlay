@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Pusher from "pusher-js";
 import { streamerSlug } from "@/lib/slug";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
@@ -121,9 +120,12 @@ export function PainelClient({
 
   const overlayUrl = streamer ? `${PUBLIC_ORIGIN}/overlay/${streamer.slug}` : "";
 
-  const [connectionState, setConnectionState] = useState<
-    "connecting" | "connected" | "disconnected"
-  >("connecting");
+  // Indicador do cabecalho. ATENCAO ao que ele significa: o painel NAO publica
+  // via Pusher — ele chama /api/trigger/*, e quem publica e o servidor. Por
+  // isso o painel nao tem como saber se o overlay no OBS esta recebendo. O que
+  // ele sabe de verdade e se o proprio navegador esta online, que e a causa
+  // mais comum de "cliquei e nao aconteceu nada".
+  const [online, setOnline] = useState(true);
   const [media, setMedia] = useState<Media[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -171,21 +173,19 @@ export function PainelClient({
     }
   }
 
-  // Status da conexao em tempo real (secao 2.1 / 7): o mod precisa saber se
-  // esta de fato conectado antes de tentar disparar algo.
+  // Antes isto abria uma conexao WebSocket com o Pusher so para pintar o
+  // indicador — o painel nao assina canal nenhum. Cada painel aberto gastava
+  // uma conexao simultanea da cota, que e o limite que estoura primeiro quando
+  // ha muitos mods online. Os eventos online/offline do navegador dao a mesma
+  // informacao util com custo zero.
   useEffect(() => {
-    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY || "", {
-      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "us2",
-    });
-
-    pusher.connection.bind("state_change", (states: { current: string }) => {
-      if (states.current === "connected") setConnectionState("connected");
-      else if (states.current === "connecting") setConnectionState("connecting");
-      else setConnectionState("disconnected");
-    });
-
+    const atualizar = () => setOnline(navigator.onLine);
+    atualizar();
+    window.addEventListener("online", atualizar);
+    window.addEventListener("offline", atualizar);
     return () => {
-      pusher.disconnect();
+      window.removeEventListener("online", atualizar);
+      window.removeEventListener("offline", atualizar);
     };
   }, []);
 
@@ -491,11 +491,7 @@ export function PainelClient({
     }
   }
 
-  const statusLabel = useMemo(() => {
-    if (connectionState === "connected") return "Conectado";
-    if (connectionState === "connecting") return "Conectando...";
-    return "Desconectado";
-  }, [connectionState]);
+  const statusLabel = online ? "Online" : "Sem conexão";
 
   return (
     <main className="painel">
@@ -505,8 +501,8 @@ export function PainelClient({
           <p>Controle o overlay dos seus streamers</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span className="status-pill">
-            <span className={`status-dot ${connectionState}`} />
+          <span className="status-pill" title={online ? "Seu navegador está online" : "Seu navegador está sem internet"}>
+            <span className={`status-dot ${online ? "connected" : "disconnected"}`} />
             {statusLabel}
           </span>
           <ThemeToggle />
