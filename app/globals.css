@@ -939,7 +939,10 @@ button:disabled {
     calc(var(--x, 0.5) * 100vw - 50%),
     calc(var(--y, 0.5) * 100vh - 50%)
   );
-  transition: transform 0.08s linear, width 0.08s linear, height 0.08s linear;
+  /* Interpola entre as mensagens de movimento: precisa durar um pouco mais
+     que MOVE_THROTTLE_MS (Mesa.tsx) para o item nunca ficar parado esperando
+     a proxima. Mudou um? Mude o outro. */
+  transition: transform 0.13s linear, width 0.13s linear, height 0.13s linear;
   will-change: transform, width, height;
 }
 

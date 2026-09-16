@@ -42,7 +42,11 @@ type PlacedItem = {
   hidden: boolean;
 };
 
-const MOVE_THROTTLE_MS = 55;
+// Intervalo minimo entre mensagens de movimento enviadas ao overlay.
+// ATENCAO: anda junto com a `transition` de .overlay-movable no globals.css.
+// A transicao precisa durar um pouco MAIS que este intervalo; se durar menos,
+// o item termina a animacao e fica parado ate a proxima mensagem, engasgando.
+const MOVE_THROTTLE_MS = 120;
 const MIN_SCALE = 0.005;
 const MAX_SCALE = 3;
 
