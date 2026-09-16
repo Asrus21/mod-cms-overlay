@@ -177,6 +177,10 @@ export function Mesa({
   // Caixa "Feed ao vivo": o mod cola o link do player (relay do OBS dele) e vira
   // um item na mesa — aparece no mesmo overlay do streamer que as demais midias.
   const [embedInput, setEmbedInput] = useState("");
+  // Ferramenta de inserção aberta na barra de ícones (null = só os ícones).
+  const [ferramenta, setFerramenta] = useState<
+    "midia" | "texto" | "widget" | "feed" | null
+  >(null);
   // Widget a adicionar: tipo, rotulo opcional e (na contagem) a duracao.
   const [widgetKind, setWidgetKind] = useState<WidgetKind>("clock");
   const [widgetLabel, setWidgetLabel] = useState("");
@@ -1217,120 +1221,137 @@ export function Mesa({
   // --- Blocos de UI reaproveitados nos dois modos (secao do painel e tela
   // exclusiva em tela cheia). A logica de interacao e a mesma; muda so o
   // arranjo: no modo tela cheia eles viram paineis flutuantes sobre o palco.
+  // Barra de inserção: ícones pequenos (como a barra do canvas do Pogly). Cada
+  // um diz o que é ao passar o mouse e, ao clicar, abre o painel com os campos
+  // daquele tipo. Antes eram quatro linhas de controle empilhadas, que comiam
+  // boa parte da tela mesmo quando não se ia adicionar nada.
+  const FERRAMENTAS = [
+    { id: "midia", icone: "🖼️", nome: "Mídia da biblioteca" },
+    { id: "texto", icone: "🔤", nome: "Texto na tela" },
+    { id: "widget", icone: "⏱️", nome: "Widget (relógio, contagem, cronômetro)" },
+    { id: "feed", icone: "📡", nome: "Feed ao vivo do seu OBS" },
+  ] as const;
+
   const addControls = (
-    <>
-      <div className="mesa-controls">
-        <select value={pickId} onChange={(e) => setPickId(e.target.value)}>
-          <option value="">Escolha uma mídia…</option>
-          {media.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.type === "AUDIO" ? "🔊 " : ""}
-              {m.name}
-            </option>
-          ))}
-        </select>
-        <button
-          className="primary"
-          onClick={handlePlace}
-          disabled={!pickId || placing || !streamerSlug}
-        >
-          {placing ? "Colocando…" : "Colocar na mesa"}
-        </button>
+    <div className="mesa-add">
+      <div className="mesa-tools">
+        {FERRAMENTAS.map((f) => (
+          <button
+            key={f.id}
+            className={`mesa-tool${ferramenta === f.id ? " ativa" : ""}`}
+            aria-label={f.nome}
+            aria-pressed={ferramenta === f.id}
+            disabled={!streamerSlug}
+            onClick={() => setFerramenta(ferramenta === f.id ? null : f.id)}
+          >
+            <span aria-hidden="true">{f.icone}</span>
+            <span className="mesa-tool-dica">{f.nome}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="mesa-controls">
-        <input
-          placeholder="Texto para a tela…"
-          value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleAddText();
-          }}
-          style={{ flex: "1 1 240px" }}
-        />
-        <button
-          className="primary"
-          onClick={handleAddText}
-          disabled={!textInput.trim() || !streamerSlug}
-        >
-          Adicionar texto
-        </button>
-      </div>
+      {ferramenta === "midia" && (
+        <div className="mesa-tool-painel">
+          <select value={pickId} onChange={(e) => setPickId(e.target.value)} aria-label="Mídia">
+            <option value="">Escolha uma mídia…</option>
+            {media.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.type === "AUDIO" ? "🔊 " : ""}
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <button className="primary" onClick={handlePlace} disabled={!pickId || placing}>
+            {placing ? "Colocando…" : "Colocar na mesa"}
+          </button>
+        </div>
+      )}
 
-      <div className="mesa-controls">
-        <select
-          value={widgetKind}
-          onChange={(e) => setWidgetKind(e.target.value as WidgetKind)}
-          aria-label="Tipo de widget"
-        >
-          <option value="clock">⏰ Relógio</option>
-          <option value="countdown">⏳ Contagem regressiva</option>
-          <option value="stopwatch">⏱ Cronômetro</option>
-        </select>
-        {widgetKind === "countdown" && (
+      {ferramenta === "texto" && (
+        <div className="mesa-tool-painel">
           <input
-            type="number"
-            min={1}
-            value={widgetMinutes}
-            onChange={(e) => setWidgetMinutes(e.target.value)}
-            aria-label="Minutos"
-            title="Duração em minutos"
-            style={{ width: "5rem" }}
+            autoFocus
+            placeholder="Texto para a tela…"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAddText();
+            }}
           />
-        )}
-        <input
-          placeholder="Rótulo (opcional)…"
-          value={widgetLabel}
-          onChange={(e) => setWidgetLabel(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleAddWidget();
-          }}
-          style={{ flex: "1 1 140px" }}
-        />
-        <button className="primary" onClick={handleAddWidget} disabled={!streamerSlug}>
-          Adicionar widget
-        </button>
-      </div>
+          <button className="primary" onClick={handleAddText} disabled={!textInput.trim()}>
+            Adicionar
+          </button>
+        </div>
+      )}
 
-      <div className="mesa-controls">
-        <input
-          placeholder="Feed ao vivo: link do player do seu OBS…"
-          value={embedInput}
-          onChange={(e) => setEmbedInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleAddEmbed();
-          }}
-          style={{ flex: "1 1 240px" }}
-        />
-        <button
-          className="primary"
-          onClick={handleAddEmbed}
-          disabled={!embedInput.trim() || !streamerSlug}
-          title="Cole o link do player do seu relay (Cloudflare Stream, MediaMTX, etc.)"
-        >
-          Adicionar feed ao vivo
-        </button>
-      </div>
-      <p className="mesa-bg-note" style={{ marginTop: 0 }}>
-        <strong>Feed ao vivo</strong>: transmita seu OBS para um <strong>relay</strong>{" "}
-        (ex.: Cloudflare Stream ou MediaMTX) e cole aqui o <strong>link do player</strong>.
-        Ele vira um item na mesa e aparece no <strong>mesmo overlay do streamer</strong>{" "}
-        — um link só mostra a mesa + seu OBS ao vivo juntos.
-      </p>
+      {ferramenta === "widget" && (
+        <div className="mesa-tool-painel">
+          <select
+            value={widgetKind}
+            onChange={(e) => setWidgetKind(e.target.value as WidgetKind)}
+            aria-label="Tipo de widget"
+          >
+            <option value="clock">⏰ Relógio</option>
+            <option value="countdown">⏳ Contagem regressiva</option>
+            <option value="stopwatch">⏱ Cronômetro</option>
+          </select>
+          {widgetKind === "countdown" && (
+            <input
+              type="number"
+              min={1}
+              value={widgetMinutes}
+              onChange={(e) => setWidgetMinutes(e.target.value)}
+              aria-label="Duração em minutos"
+              title="Duração em minutos"
+              style={{ width: "5rem", flex: "none" }}
+            />
+          )}
+          <input
+            placeholder="Rótulo (opcional)…"
+            value={widgetLabel}
+            onChange={(e) => setWidgetLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAddWidget();
+            }}
+          />
+          <button className="primary" onClick={handleAddWidget}>
+            Adicionar
+          </button>
+        </div>
+      )}
 
-      {streamerSlug ? (
-        <p className="mesa-bg-note">
-          Colocando no overlay de <strong>{streamerName || streamerSlug}</strong>.
-        </p>
-      ) : (
-        <p className="mesa-bg-note">
-          Escolha um <strong>streamer</strong> na seção acima para começar.
+      {ferramenta === "feed" && (
+        <div className="mesa-tool-painel coluna">
+          <div className="mesa-tool-linha">
+            <input
+              autoFocus
+              placeholder="Link do player do seu OBS…"
+              value={embedInput}
+              onChange={(e) => setEmbedInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddEmbed();
+              }}
+            />
+            <button className="primary" onClick={handleAddEmbed} disabled={!embedInput.trim()}>
+              Adicionar
+            </button>
+          </div>
+          <p className="mesa-bg-note" style={{ margin: 0 }}>
+            Transmita seu OBS para um <strong>relay</strong> (Cloudflare Stream, MediaMTX…) e
+            cole aqui o <strong>link do player</strong>. Ele vira um item na mesa e aparece no
+            mesmo overlay do streamer.
+          </p>
+        </div>
+      )}
+
+      {!streamerSlug && (
+        <p className="mesa-bg-note" style={{ margin: 0 }}>
+          Escolha um <strong>streamer</strong> para começar.
         </p>
       )}
-    </>
+    </div>
   );
 
-  // Cenas salvas: salvar o arranjo atual e reaplicar com um clique.
   const sceneControls = (
     <div className="mesa-scenes">
       <div className="mesa-controls">
