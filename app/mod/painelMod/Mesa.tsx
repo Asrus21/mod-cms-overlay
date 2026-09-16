@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
+import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
 // nao recarrega/pausa quando o resto da mesa re-renderiza.
@@ -16,7 +17,7 @@ const StageBg = memo(function StageBg({ src, title }: { src: string; title: stri
   );
 });
 
-type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED";
+type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO" | "TEXT" | "EMBED" | "WIDGET";
 
 type Media = {
   id: string;
@@ -139,6 +140,10 @@ export function Mesa({
   // Caixa "Feed ao vivo": o mod cola o link do player (relay do OBS dele) e vira
   // um item na mesa — aparece no mesmo overlay do streamer que as demais midias.
   const [embedInput, setEmbedInput] = useState("");
+  // Widget a adicionar: tipo, rotulo opcional e (na contagem) a duracao.
+  const [widgetKind, setWidgetKind] = useState<WidgetKind>("clock");
+  const [widgetLabel, setWidgetLabel] = useState("");
+  const [widgetMinutes, setWidgetMinutes] = useState("10");
   // Zoom da previa da mesa (1x..5x). So aumenta a visualizacao para ajustar
   // itens pequenos com precisao — nao muda o tamanho real no overlay.
   const [zoom, setZoom] = useState(1);
@@ -399,6 +404,71 @@ export function Mesa({
     }
   }
 
+  // Widget: item "vivo" (relogio, contagem regressiva, cronometro). A config
+  // vai no campo `text` em JSON; os instantes sao absolutos para todo mundo
+  // (mod, overlay, espectador) ver exatamente o mesmo numero.
+  async function handleAddWidget() {
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    const agora = Date.now();
+    const cfg: Record<string, unknown> = { kind: widgetKind, withSeconds: true };
+    if (widgetLabel.trim()) cfg.label = widgetLabel.trim();
+    if (widgetKind === "countdown") {
+      const min = Number(widgetMinutes);
+      if (!Number.isFinite(min) || min <= 0) {
+        alert("Informe quantos minutos a contagem regressiva deve durar.");
+        return;
+      }
+      cfg.targetAt = agora + min * 60_000;
+    }
+    if (widgetKind === "stopwatch") cfg.startedAt = agora;
+
+    const content = JSON.stringify(cfg);
+    const itemId = genId();
+    const placed: PlacedItem = {
+      itemId,
+      media: { id: itemId, name: WIDGET_LABEL[widgetKind], type: "WIDGET", url: "", tags: [] },
+      text: content,
+      x: 0.5,
+      y: 0.5,
+      scaleX: 0.06,
+      scaleY: null,
+      volume: 1,
+      muted: false,
+      // Entra OCULTO, igual aos demais: so aparece no overlay ao clicar em 👁.
+      hidden: true,
+    };
+    try {
+      const res = await fetch("/api/trigger/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          streamer: streamerSlug,
+          type: "WIDGET",
+          text: content,
+          sticky: true,
+          x: 0.5,
+          y: 0.5,
+          scale: 0.06,
+          hidden: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao adicionar widget");
+      }
+      setItems((prev) => [...prev, placed]);
+      setSelectedId(itemId);
+      setWidgetLabel("");
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro");
+    }
+  }
+
   // Feed ao vivo: cola o link do player (do seu relay: Cloudflare Stream,
   // MediaMTX, etc.) e ele vira um item na mesa (iframe), aparecendo no MESMO
   // overlay do streamer que as demais midias — um link so mostra mesa + seu OBS.
@@ -473,9 +543,11 @@ export function Mesa({
 
     // Monta o payload do /show conforme o tipo, copiando os valores do original.
     let payload: Record<string, unknown>;
-    if (type === "TEXT") {
+    if (type === "TEXT" || type === "WIDGET") {
+      // O widget e copiado com a MESMA config (inclusive o instante alvo da
+      // contagem), entao a copia marca exatamente o mesmo tempo do original.
       payload = {
-        itemId, streamer: streamerSlug, type: "TEXT", text: src.text ?? "",
+        itemId, streamer: streamerSlug, type, text: src.text ?? "",
         sticky: true, x: nx, y: ny, scale: src.scaleX, hidden: src.hidden,
       };
     } else if (type === "EMBED") {
@@ -592,7 +664,7 @@ export function Mesa({
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setSelectedId(item.itemId);
 
-    const isText = item.media.type === "TEXT";
+    const isText = item.media.type === "TEXT" || item.media.type === "WIDGET";
     const grabLeft = handle.includes("l");
     const grabRight = handle.includes("r");
     const grabTop = handle.includes("t");
@@ -865,6 +937,41 @@ export function Mesa({
       </div>
 
       <div className="mesa-controls">
+        <select
+          value={widgetKind}
+          onChange={(e) => setWidgetKind(e.target.value as WidgetKind)}
+          aria-label="Tipo de widget"
+        >
+          <option value="clock">⏰ Relógio</option>
+          <option value="countdown">⏳ Contagem regressiva</option>
+          <option value="stopwatch">⏱ Cronômetro</option>
+        </select>
+        {widgetKind === "countdown" && (
+          <input
+            type="number"
+            min={1}
+            value={widgetMinutes}
+            onChange={(e) => setWidgetMinutes(e.target.value)}
+            aria-label="Minutos"
+            title="Duração em minutos"
+            style={{ width: "5rem" }}
+          />
+        )}
+        <input
+          placeholder="Rótulo (opcional)…"
+          value={widgetLabel}
+          onChange={(e) => setWidgetLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAddWidget();
+          }}
+          style={{ flex: "1 1 140px" }}
+        />
+        <button className="primary" onClick={handleAddWidget} disabled={!streamerSlug}>
+          Adicionar widget
+        </button>
+      </div>
+
+      <div className="mesa-controls">
         <input
           placeholder="Feed ao vivo: link do player do seu OBS…"
           value={embedInput}
@@ -1103,7 +1210,7 @@ export function Mesa({
             );
           }
 
-          if (it.media.type === "TEXT") {
+          if (it.media.type === "TEXT" || it.media.type === "WIDGET") {
             return (
               <div
                 key={it.itemId}
@@ -1123,7 +1230,13 @@ export function Mesa({
                 onPointerDown={(e) => onItemPointerDown(e, it)}
               >
                 {isSel && toolbar}
-                <span className="mesa-text">{it.text}</span>
+                <span className="mesa-text">
+                  {it.media.type === "WIDGET" ? (
+                    <WidgetView config={parseWidget(it.text)} />
+                  ) : (
+                    it.text
+                  )}
+                </span>
                 {isSel &&
                   TEXT_HANDLES.map((h) => (
                     <span
@@ -1241,7 +1354,11 @@ export function Mesa({
     <ul className="canvas-elements">
       {items.map((it, i) => {
         const name =
-          it.media.type === "TEXT" ? it.text || "(texto vazio)" : it.media.name || "(sem nome)";
+          it.media.type === "TEXT"
+            ? it.text || "(texto vazio)"
+            : it.media.type === "WIDGET"
+            ? `⏱ ${WIDGET_LABEL[parseWidget(it.text).kind]}`
+            : it.media.name || "(sem nome)";
         return (
           <li
             key={it.itemId}
