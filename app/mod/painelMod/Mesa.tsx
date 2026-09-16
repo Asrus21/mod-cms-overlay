@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 import { MAX_WIDGET_CODE } from "@/lib/widgets";
-import { clampPos, isOffstage } from "@/lib/stage";
+import { clampPos } from "@/lib/stage";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
 // nao recarrega/pausa quando o resto da mesa re-renderiza.
@@ -282,6 +282,43 @@ export function Mesa({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamerSlug, modSlug]);
+
+  // Quais itens estao COMPLETAMENTE fora da area que vai ao ar.
+  //
+  // Antes isso olhava so o centro (x/y fora de 0..1), o que marcava como "fora
+  // da tela" um item que ja estava aparecendo pela borda — e so o considerava
+  // dentro quando passava da metade. Agora medimos a caixa renderizada contra
+  // o palco: basta um milimetro entrar para ele contar como no ar.
+  const [foraIds, setForaIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let vivo = true;
+    const medir = () => {
+      if (!vivo) return;
+      const palco = stageRef.current?.getBoundingClientRect();
+      if (!palco) return;
+      const fora = new Set<string>();
+      for (const it of itemsRef.current) {
+        const el = boxEls.current.get(it.itemId);
+        if (!el) continue;
+        const b = el.getBoundingClientRect();
+        // Sem interseccao nenhuma com o palco = fora do ar.
+        const cruza =
+          b.right > palco.left && b.left < palco.right &&
+          b.bottom > palco.top && b.top < palco.bottom;
+        if (!cruza) fora.add(it.itemId);
+      }
+      setForaIds((antes) =>
+        antes.size === fora.size && [...fora].every((id) => antes.has(id)) ? antes : fora
+      );
+    };
+    // Depois do layout, para a medida valer para a posicao ja pintada.
+    const id = requestAnimationFrame(medir);
+    return () => {
+      vivo = false;
+      cancelAnimationFrame(id);
+    };
+  }, [items, zoom]);
 
   // Aplica volume/mudo/oculto aos elementos da previa sempre que os itens mudam.
   useEffect(() => {
@@ -1649,7 +1686,11 @@ export function Mesa({
             return (
               <div
                 key={it.itemId}
-                className={`mesa-audio-badge${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
+                ref={(el) => {
+                  if (el) boxEls.current.set(it.itemId, el);
+                  else boxEls.current.delete(it.itemId);
+                }}
+                className={`mesa-audio-badge${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${foraIds.has(it.itemId) ? " offstage" : ""}`}
                 style={{ left: `${it.x * 100}%`, top: `${it.y * 100}%`, transform: "translate(-50%, -50%)" }}
                 onPointerDown={(e) => onItemPointerDown(e, it)}
               >
@@ -1678,7 +1719,7 @@ export function Mesa({
                   if (el) boxEls.current.set(it.itemId, el);
                   else boxEls.current.delete(it.itemId);
                 }}
-                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
+                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${foraIds.has(it.itemId) ? " offstage" : ""}`}
                 style={
                   {
                     left: `${it.x * 100}%`,
@@ -1719,7 +1760,7 @@ export function Mesa({
                   if (el) boxEls.current.set(it.itemId, el);
                   else boxEls.current.delete(it.itemId);
                 }}
-                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
+                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${foraIds.has(it.itemId) ? " offstage" : ""}`}
                 style={{
                   left: `${it.x * 100}%`,
                   top: `${it.y * 100}%`,
@@ -1759,7 +1800,7 @@ export function Mesa({
                 if (el) boxEls.current.set(it.itemId, el);
                 else boxEls.current.delete(it.itemId);
               }}
-              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${isOffstage(it.x, it.y) ? " offstage" : ""}`}
+              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${foraIds.has(it.itemId) ? " offstage" : ""}`}
               style={{
                 left: `${it.x * 100}%`,
                 top: `${it.y * 100}%`,
@@ -1823,7 +1864,7 @@ export function Mesa({
           <li
             key={it.itemId}
             className={`canvas-el${it.itemId === selectedId ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
-            title={isOffstage(it.x, it.y) ? "Estacionado fora da tela (não aparece na live)" : undefined}
+            title={foraIds.has(it.itemId) ? "Totalmente fora da tela (não aparece na live)" : undefined}
           >
             <button
               className="canvas-el-pick"
@@ -1832,7 +1873,7 @@ export function Mesa({
             >
               <span className="canvas-el-key">{i < 9 ? i + 1 : i === 9 ? 0 : "·"}</span>
               <span className="canvas-el-name">
-                {isOffstage(it.x, it.y) ? "↗ " : ""}
+                {foraIds.has(it.itemId) ? "↗ " : ""}
                 {name}
               </span>
             </button>

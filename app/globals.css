@@ -866,7 +866,12 @@ button:disabled {
    do container (mesa ou overlay), controlado pelo mesmo --s do slider. */
 .overlay-movable.text-item,
 .mesa-item.text-item {
-  width: auto;
+  /* max-content, nao auto: na mesa o item e posicionado com `left: X%`, entao
+     perto (ou alem) da borda direita o espaco disponivel encolhe e o texto
+     quebraria em uma letra por linha — a previa mostrava 4% da largura onde a
+     live mostra 20%. max-content ignora o espaco disponivel e usa a largura
+     natural do texto, igual ao overlay. */
+  width: max-content;
 }
 
 .overlay-text,
