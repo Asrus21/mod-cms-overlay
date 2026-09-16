@@ -90,6 +90,18 @@ type DragState = {
   startClientY: number;
 };
 
+// Remodelar livre (Alt + arrastar sobre o item): muda largura e altura de forma
+// independente, a partir do CENTRO — o item nao sai do lugar enquanto voce
+// molda. Nao precisa acertar as alcinhas, e pode distorcer de proposito.
+type FreeResizeState = {
+  itemId: string;
+  isText: boolean;
+  startClientX: number;
+  startClientY: number;
+  startScaleX: number;
+  startScaleY: number | null;
+};
+
 // Item de uma cena salva, como vem de /api/scenes/<id> (ja normalizado no
 // servidor por lib/scenes.ts).
 type SceneSnapshotItem = {
@@ -138,6 +150,7 @@ export function Mesa({
   const lastSentRef = useRef(0);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
+  const freeRef = useRef<FreeResizeState | null>(null);
   // Elementos de midia da previa (video/audio) por itemId, para aplicar
   // volume/mudo e pausar quando oculto.
   const mediaEls = useRef<Map<string, HTMLMediaElement>>(new Map());
@@ -181,6 +194,10 @@ export function Mesa({
   // Motivo de as cenas estarem indisponiveis (ex.: tabela nao criada no banco).
   // Sem isto a lista apareceria vazia, como se so nao houvesse cena salva.
   const [sceneErro, setSceneErro] = useState("");
+
+  // Alt segurado: muda o cursor sobre os itens, senao ninguem descobre que da
+  // para remodelar sem acertar as alcinhas.
+  const [altHeld, setAltHeld] = useState(false);
 
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgMode, setBgMode] = useState<BgMode>("none");
@@ -811,6 +828,32 @@ export function Mesa({
   // --- Arrastar item (delta relativo: o item acompanha o cursor sem "pular") ---
   function onItemPointerDown(e: React.PointerEvent, item: PlacedItem) {
     setSelectedId(item.itemId);
+
+    // Alt segurado: remodela em vez de mover.
+    if (e.altKey) {
+      e.preventDefault();
+      const isText = item.media.type === "TEXT" || item.media.type === "WIDGET";
+      // Texto/widget escalam pela fonte (scaleY nao se aplica). Nos demais,
+      // se a altura for natural (null), congela a altura atual medida para a
+      // remodelagem partir do tamanho que esta na tela.
+      let h = item.scaleY;
+      if (!isText && h == null) {
+        const rect = stageRef.current?.getBoundingClientRect();
+        const boxH = boxEls.current.get(item.itemId)?.getBoundingClientRect().height;
+        if (rect && boxH) h = clamp(boxH / rect.height, MIN_SCALE, MAX_SCALE);
+      }
+      freeRef.current = {
+        itemId: item.itemId,
+        isText,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startScaleX: item.scaleX,
+        startScaleY: isText ? null : h,
+      };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+
     dragRef.current = {
       itemId: item.itemId,
       startCX: item.x,
@@ -821,7 +864,32 @@ export function Mesa({
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
+  // Remodelagem livre: o crescimento e o DOBRO do deslocamento porque o item
+  // cresce para os dois lados (ancorado no centro).
+  function applyFreeResize(e: React.PointerEvent, commit: boolean) {
+    const f = freeRef.current;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!f || !rect) return;
+    const dx = (e.clientX - f.startClientX) / rect.width;
+    const dy = (e.clientY - f.startClientY) / rect.height;
+
+    const nx = clamp(f.startScaleX + dx * 2, MIN_SCALE, MAX_SCALE);
+    const patch: Partial<PlacedItem> = f.isText
+      ? { scaleX: nx, scaleY: null }
+      : {
+          scaleX: nx,
+          scaleY:
+            f.startScaleY == null ? null : clamp(f.startScaleY + dy * 2, MIN_SCALE, MAX_SCALE),
+        };
+    const next = patchItem(f.itemId, patch);
+    if (next) pushMove(next, commit);
+  }
+
   function onStagePointerMove(e: React.PointerEvent) {
+    if (freeRef.current) {
+      applyFreeResize(e, false);
+      return;
+    }
     if (resizeRef.current) {
       applyResize(e, false);
       return;
@@ -839,6 +907,11 @@ export function Mesa({
   }
 
   function onStagePointerUp(e: React.PointerEvent) {
+    if (freeRef.current) {
+      applyFreeResize(e, true);
+      freeRef.current = null;
+      return;
+    }
     if (resizeRef.current) {
       applyResize(e, true);
       resizeRef.current = null;
@@ -1048,6 +1121,21 @@ export function Mesa({
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, streamerSlug]);
+
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => { if (e.altKey) setAltHeld(true); };
+    const onUp = (e: KeyboardEvent) => { if (!e.altKey) setAltHeld(false); };
+    // Trocar de janela com Alt pressionado deixaria o cursor preso no estado.
+    const onBlur = () => setAltHeld(false);
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   // Zoom com Ctrl + scroll do mouse, centrado no ponteiro. Aumentamos o palco
   // (via zoom) e ajustamos o scroll do viewport para o ponto sob o cursor
@@ -1379,7 +1467,7 @@ export function Mesa({
       >
         <div
           ref={stageRef}
-          className="mesa-stage"
+          className={`mesa-stage${altHeld ? " alt-remodelar" : ""}`}
           style={
             {
               "--zoom": zoom,

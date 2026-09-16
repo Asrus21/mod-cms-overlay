@@ -1749,3 +1749,10 @@ button:disabled {
 .mesa-viewport.tem-offstage {
   padding: 25%;
 }
+
+/* Alt segurado: o cursor sobre os itens vira o de redimensionar, sinalizando
+   que arrastar agora remodela (largura e altura) em vez de mover. */
+.mesa-stage.alt-remodelar .mesa-item,
+.mesa-stage.alt-remodelar .mesa-audio-badge {
+  cursor: nwse-resize;
+}
