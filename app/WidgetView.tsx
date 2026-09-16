@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isCountdownDone, widgetText, type WidgetConfig } from "@/lib/widgets";
+import { buildWidgetDoc, isCountdownDone, widgetText, type WidgetConfig } from "@/lib/widgets";
 
 // Widgets: itens "vivos" da mesa, que se atualizam sozinhos na tela (relogio,
 // contagem regressiva e cronometro). Diferente das demais midias, o conteudo
@@ -19,6 +19,23 @@ export function WidgetView({ config }: { config: WidgetConfig }) {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Widget personalizado: o codigo do mod roda num iframe ISOLADO.
+  // sandbox="allow-scripts" SEM allow-same-origin poe o codigo numa origem
+  // opaca — ele nao alcanca o DOM do painel/overlay, nem cookies, nem o
+  // localStorage do nosso dominio. Nunca adicione allow-same-origin aqui: as
+  // duas permissoes juntas anulam o isolamento.
+  if (config.kind === "custom") {
+    return (
+      <iframe
+        className="widget-custom"
+        title="Widget personalizado"
+        sandbox="allow-scripts"
+        srcDoc={buildWidgetDoc(config)}
+      />
+    );
+  }
+
 
   return (
     // O valor depende do relogio: o HTML gerado no servidor e o do cliente
