@@ -48,6 +48,8 @@ type PlacedItem = {
 // A transicao precisa durar um pouco MAIS que este intervalo; se durar menos,
 // o item termina a animacao e fica parado ate a proxima mensagem, engasgando.
 const MOVE_THROTTLE_MS = 120;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 5;
 const MIN_SCALE = 0.005;
 const MAX_SCALE = 3;
 
@@ -1137,7 +1139,37 @@ export function Mesa({
     };
   }, []);
 
-  // Zoom com Ctrl + scroll do mouse, centrado no ponteiro. Aumentamos o palco
+  // Pan com o botao do MEIO arrastando (como no canvas do Pogly): move a
+  // area visivel sem mexer em nenhum item. E o par natural do zoom na roda —
+  // com a roda dando zoom, ela nao rola mais o viewport.
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+
+  function onViewportPointerDown(e: React.PointerEvent) {
+    if (e.button !== 1) return; // so o botao do meio
+    const el = viewportRef.current;
+    if (!el) return;
+    e.preventDefault();
+    panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    el.classList.add("panning");
+    el.setPointerCapture(e.pointerId);
+
+    const mover = (ev: PointerEvent) => {
+      const p = panRef.current;
+      if (!p || !el) return;
+      el.scrollLeft = p.left - (ev.clientX - p.x);
+      el.scrollTop = p.top - (ev.clientY - p.y);
+    };
+    const soltar = () => {
+      panRef.current = null;
+      el.classList.remove("panning");
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+    };
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  }
+
+  // Zoom com a roda do mouse, centrado no ponteiro. Aumentamos o palco
   // (via zoom) e ajustamos o scroll do viewport para o ponto sob o cursor
   // continuar sob o cursor. Sem Ctrl, o scroll rola a pagina/viewport normal.
   useEffect(() => {
@@ -1145,14 +1177,17 @@ export function Mesa({
     if (!vp) return;
 
     function onWheel(e: WheelEvent) {
-      if (!e.ctrlKey && !e.metaKey) return; // so com Ctrl/Cmd
+      // Na tela exclusiva a roda da zoom direto. Dentro do painel ela so faz
+      // zoom com Ctrl/Cmd: la a mesa e uma secao de uma pagina que rola, e
+      // sequestrar a roda prenderia a rolagem da pagina sobre a mesa.
+      if (!fullscreen && !e.ctrlKey && !e.metaKey) return;
       e.preventDefault(); // evita o zoom do navegador
       const el = viewportRef.current;
       if (!el) return;
 
       const oldZoom = zoomRef.current;
       const factor = Math.exp(-e.deltaY * 0.0015);
-      const newZoom = clamp(oldZoom * factor, 1, 5);
+      const newZoom = clamp(oldZoom * factor, MIN_ZOOM, MAX_ZOOM);
       if (newZoom === oldZoom) return;
 
       // Ponto sob o cursor (em px, relativo ao conteudo do palco) antes do zoom.
@@ -1177,7 +1212,7 @@ export function Mesa({
 
     vp.addEventListener("wheel", onWheel, { passive: false });
     return () => vp.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [fullscreen]);
 
   // --- Blocos de UI reaproveitados nos dois modos (secao do painel e tela
   // exclusiva em tela cheia). A logica de interacao e a mesma; muda so o
@@ -1444,9 +1479,9 @@ export function Mesa({
         <span>Zoom</span>
         <input
           type="range"
-          min={1}
-          max={5}
-          step={0.25}
+          min={MIN_ZOOM}
+          max={MAX_ZOOM}
+          step={0.05}
           value={zoom}
           onChange={(e) => setZoom(Number(e.target.value))}
         />
@@ -1456,15 +1491,17 @@ export function Mesa({
             Resetar
           </button>
         )}
-        <span className="mesa-audio-note">Ctrl + scroll do mouse também dá zoom (centrado no ponteiro). Só aumenta a visualização (não afeta o overlay).</span>
+        <span className="mesa-audio-note">
+          {fullscreen
+            ? "Roda do mouse dá zoom (centrado no ponteiro) e o botão do meio arrasta a tela. Abaixo de 1× você enxerga o que está estacionado fora."
+            : "Ctrl + roda do mouse dá zoom (sem Ctrl a página rola normalmente)."}{" "}
+          Só muda a visualização, não afeta o overlay.
+        </span>
       </div>
   );
 
   const stage = (
-      <div
-        className={`mesa-viewport${items.some((i) => isOffstage(i.x, i.y)) ? " tem-offstage" : ""}`}
-        ref={viewportRef}
-      >
+      <div className="mesa-viewport" ref={viewportRef} onPointerDown={onViewportPointerDown}>
         <div
           ref={stageRef}
           className={`mesa-stage${altHeld ? " alt-remodelar" : ""}`}

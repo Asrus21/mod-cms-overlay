@@ -493,9 +493,11 @@ a {
   overflow: auto;
   max-height: 75vh;
   border-radius: 10px;
-  /* Margem pequena no uso normal — o palco fica quase do tamanho todo. */
-  padding: 6%;
-  transition: padding 0.18s ease;
+  /* Margem CONSTANTE. Ja foi condicional (crescia quando havia item fora da
+     tela) e isso dava um solavanco de zoom toda vez que um item entrava ou
+     saia. Para alcancar o que esta estacionado longe, use zoom out (roda do
+     mouse) e pan (botao do meio) — sem a mesa mudar de tamanho sozinha. */
+  padding: 8%;
 }
 
 .mesa-zoom-row {
@@ -1743,11 +1745,10 @@ button:disabled {
   pointer-events: none;
 }
 
-/* So quando existe item estacionado fora do palco a margem cresce, para o mod
-   conseguir ver e agarrar o que guardou. Sem item fora, o palco continua
-   grande. 25% = exatamente o alcance de OFFSTAGE (ver lib/stage.ts). */
-.mesa-viewport.tem-offstage {
-  padding: 25%;
+/* Pan em andamento (botao do meio): cursor de agarrar e sem selecao de texto. */
+.mesa-viewport.panning {
+  cursor: grabbing;
+  user-select: none;
 }
 
 /* Alt segurado: o cursor sobre os itens vira o de redimensionar, sinalizando
