@@ -5,6 +5,13 @@ import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos } from "@/lib/stage";
+import {
+  QUALIDADES,
+  QUALIDADE_PADRAO,
+  canalDaEntrada,
+  urlDoPlayer,
+  type QualidadeId,
+} from "@/lib/twitch-player";
 
 // Fundo (Twitch/OBS) memoizado: so re-renderiza se a URL mudar. Assim o player
 // nao recarrega/pausa quando o resto da mesa re-renderiza.
@@ -178,9 +185,13 @@ export function Mesa({
   // Caixa "Feed ao vivo": o mod cola o link do player (relay do OBS dele) e vira
   // um item na mesa — aparece no mesmo overlay do streamer que as demais midias.
   const [embedInput, setEmbedInput] = useState("");
+  // Transmissão da Twitch: canal, qualidade e se entra com áudio.
+  const [twitchCanal, setTwitchCanal] = useState("");
+  const [twitchQ, setTwitchQ] = useState<QualidadeId>(QUALIDADE_PADRAO);
+  const [twitchAudio, setTwitchAudio] = useState(false);
   // Ferramenta de inserção aberta na barra de ícones (null = só os ícones).
   const [ferramenta, setFerramenta] = useState<
-    "midia" | "texto" | "widget" | "feed" | null
+    "midia" | "texto" | "widget" | "feed" | "twitch" | null
   >(null);
   // Widget a adicionar: tipo, rotulo opcional e (na contagem) a duracao.
   const [widgetKind, setWidgetKind] = useState<WidgetKind>("clock");
@@ -541,6 +552,77 @@ export function Mesa({
       setSelectedId(itemId);
       setWidgetLabel("");
       onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro");
+    }
+  }
+
+  // Transmissao da Twitch como item da mesa.
+  //
+  // Vira um item EMBED comum apontando para /mod/player/twitch — a nossa
+  // pagina do player, que e quem consegue impor a qualidade (a Twitch nao
+  // aceita isso pela URL; ver lib/twitch-player.ts). Assim nao ha tipo novo no
+  // banco e o item entra em cena, e volta ao recarregar o OBS, como os demais.
+  async function handleAddTwitch() {
+    const canal = canalDaEntrada(twitchCanal);
+    if (!canal) {
+      alert("Informe o canal da Twitch (ex.: asrus12 ou twitch.tv/asrus12).");
+      return;
+    }
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    // A URL precisa ser absoluta: o item e um EMBED e a rota de disparo exige
+    // um link http(s). A origem e a mesma de onde o painel esta aberto, entao
+    // o player sai pelo mesmo dominio do overlay.
+    const link =
+      urlDoPlayer(window.location.origin, canal, twitchQ) + (twitchAudio ? "&audio=1" : "");
+
+    const itemId = genId();
+    const placed: PlacedItem = {
+      itemId,
+      media: {
+        id: itemId,
+        name: `Twitch: ${canal}`,
+        type: "EMBED",
+        url: link,
+        tags: [],
+      },
+      x: 0.5,
+      y: 0.5,
+      // ~1/3 da largura, altura 16:9 (0.333 * 9/16 ≈ 0.1875).
+      scaleX: 0.333,
+      scaleY: 0.1875,
+      volume: 1,
+      muted: false,
+      // Entra OCULTO: so aparece no overlay quando o mod clicar em 👁.
+      hidden: true,
+    };
+    try {
+      const res = await fetch("/api/trigger/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          streamer: streamerSlug,
+          type: "EMBED",
+          url: link,
+          sticky: true,
+          x: 0.5,
+          y: 0.5,
+          scale: 0.333,
+          scaleY: 0.1875,
+          hidden: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao adicionar a transmissão");
+      }
+      setItems((prev) => [...prev, placed]);
+      setSelectedId(itemId);
+      setTwitchCanal("");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro");
     }
@@ -1251,6 +1333,7 @@ export function Mesa({
     { id: "texto", icone: "🔤", nome: "Texto na tela" },
     { id: "widget", icone: "⏱️", nome: "Widget (relógio, contagem, cronômetro)" },
     { id: "feed", icone: "📡", nome: "Feed ao vivo do seu OBS" },
+    { id: "twitch", icone: "🟣", nome: "Transmissão da Twitch" },
   ] as const;
 
   const addControls = (
@@ -1382,6 +1465,55 @@ export function Mesa({
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {ferramenta === "twitch" && (
+        <div className="mesa-tool-painel coluna">
+          <div className="mesa-twitch-linha">
+            <input
+              autoFocus
+              placeholder="Canal da Twitch (ex.: asrus12)"
+              value={twitchCanal}
+              onChange={(e) => setTwitchCanal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddTwitch();
+              }}
+              style={{ flex: "1 1 160px" }}
+            />
+            <select
+              value={twitchQ}
+              onChange={(e) => setTwitchQ(e.target.value as QualidadeId)}
+              aria-label="Qualidade da transmissão"
+            >
+              {QUALIDADES.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.rotulo}
+                </option>
+              ))}
+            </select>
+            <label className="mesa-twitch-audio">
+              <input
+                type="checkbox"
+                checked={twitchAudio}
+                onChange={(e) => setTwitchAudio(e.target.checked)}
+              />
+              Com áudio
+            </label>
+            <button
+              className="primary"
+              onClick={handleAddTwitch}
+              disabled={!twitchCanal.trim()}
+            >
+              Adicionar
+            </button>
+          </div>
+          <p className="mesa-bg-note" style={{ margin: 0 }}>
+            A transmissão do canal vira um item da mesa, na qualidade escolhida. Se o
+            canal não oferecer essa opção (nem todo canal tem 1080p ou 60fps), entra a
+            melhor que couber abaixo dela. Sem áudio por padrão, para não somar ao áudio
+            do streamer.
+          </p>
         </div>
       )}
 
