@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { streamerSlug } from "@/lib/slug";
+import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { buildPushUrl, buildSceneUrl, streamIdFromName } from "@/lib/vdo";
 import { Mesa } from "./Mesa";
 import { ThemeToggle } from "../../ThemeToggle";
@@ -22,12 +23,7 @@ const DEFAULT_DURATION_MS = 5000;
 
 // Dominio canonico do site. O link do overlay para o OBS SEMPRE usa este
 // endereco (nao o `window.location` de onde o mod abriu o painel), para bater
-// exatamente com o link "antigo"/limpo que os streamers ja tem no OBS —
-// independente de abrir em `www.`, no preview do Vercel, etc. Pode ser trocado
-// pela env NEXT_PUBLIC_PUBLIC_ORIGIN se o dominio canonico mudar.
-const PUBLIC_ORIGIN = (
-  process.env.NEXT_PUBLIC_PUBLIC_ORIGIN || "https://asrus.app"
-).replace(/\/+$/, "");
+
 
 const TYPE_LABEL: Record<MediaType, string> = {
   IMAGE: "Imagem",

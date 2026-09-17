@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Mesa } from "../Mesa";
+import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -15,12 +16,6 @@ type Media = {
 };
 
 type StreamerEntry = { slug: string; name: string; self?: boolean };
-
-// Mesmo dominio canonico usado no painel, para o link do overlay bater com o
-// que os streamers ja tem colado no OBS.
-const PUBLIC_ORIGIN = (
-  process.env.NEXT_PUBLIC_PUBLIC_ORIGIN || "https://asrus.app"
-).replace(/\/+$/, "");
 
 export function CanvasClient({
   modSlug,
