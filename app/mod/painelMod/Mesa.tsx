@@ -7,6 +7,7 @@ import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../Wi
 import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos } from "@/lib/stage";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
+import { nomeDoArquivo, tipoDoArquivo, type TipoMidia } from "@/lib/media-tipo";
 import {
   QUALIDADES,
   QUALIDADE_PADRAO,
@@ -200,6 +201,15 @@ export function Mesa({
   // Grade de alinhamento sobre o palco. Só visual (não vai para o overlay);
   // fica guardada no navegador para não voltar desligada a cada visita.
   const [grade, setGrade] = useState(false);
+  // Painel de mídia: aba aberta e filtro por tipo da biblioteca.
+  const [abaMidia, setAbaMidia] = useState<"biblioteca" | "enviar">("biblioteca");
+  const [filtroTipo, setFiltroTipo] = useState<"todos" | TipoMidia>("todos");
+  // Envio de arquivo direto da mesa.
+  const [envArquivo, setEnvArquivo] = useState<File | null>(null);
+  const [envNome, setEnvNome] = useState("");
+  const [envTipo, setEnvTipo] = useState<TipoMidia>("IMAGE");
+  const [enviando, setEnviando] = useState(false);
+
   // Qualidade da live usada como FUNDO da mesa. Mais baixa por padrão: o fundo
   // fica tocando o tempo todo e serve só de guia, então não vale gastar banda
   // (nem quadros) com 1080p60 nele.
@@ -410,7 +420,13 @@ export function Mesa({
 
   async function handlePlace() {
     const item = media.find((m) => m.id === pickId);
-    if (!item) return;
+    if (item) await colocarNaMesa(item);
+  }
+
+  // Coloca uma midia da biblioteca na mesa. Recebe o objeto (e nao o id)
+  // porque o envio de arquivo precisa colocar o que acabou de cadastrar, sem
+  // esperar a lista da biblioteca recarregar.
+  async function colocarNaMesa(item: Media) {
     if (!streamerSlug) {
       alert("Escolha um streamer primeiro (campo Streamer acima).");
       return;
@@ -454,6 +470,54 @@ export function Mesa({
       alert(err instanceof Error ? err.message : "Erro");
     } finally {
       setPlacing(false);
+    }
+  }
+
+  // Envio de arquivo direto da mesa.
+  //
+  // Antes so dava para colocar o que ja estava na biblioteca: para usar algo
+  // novo era preciso sair da mesa, ir ao formulario de cadastro do painel,
+  // enviar e voltar. E o mesmo caminho de duas etapas do painel (arquivo para
+  // /api/media/upload, metadados para /api/media), e no fim o item ja entra na
+  // mesa.
+  async function handleEnviar() {
+    if (!envArquivo || enviando) return;
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    const nome = envNome.trim() || nomeDoArquivo(envArquivo.name) || "sem nome";
+    setEnviando(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", envArquivo);
+      const up = await fetch("/api/media/upload", { method: "POST", body: fd });
+      if (!up.ok) {
+        const data = await up.json().catch(() => ({}));
+        throw new Error(data.error || "Falha no upload");
+      }
+      const { url } = (await up.json()) as { url: string };
+
+      const criar = await fetch("/api/media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nome, type: envTipo, url, tags: [] }),
+      });
+      if (!criar.ok) {
+        const data = await criar.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao cadastrar a mídia");
+      }
+      const { media: criada } = (await criar.json()) as { media: Media };
+
+      setEnvArquivo(null);
+      setEnvNome("");
+      // Recarrega a biblioteca do painel para a nova midia aparecer na lista.
+      onAction();
+      if (criada) await colocarNaMesa(criada);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao enviar");
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -1500,6 +1564,24 @@ export function Mesa({
     { id: "twitch", icone: "🟣", nome: "Transmissão da Twitch" },
   ] as const;
 
+  const FILTROS_TIPO: ReadonlyArray<{ id: "todos" | TipoMidia; rotulo: string }> = [
+    { id: "todos", rotulo: "Todos" },
+    { id: "IMAGE", rotulo: "Imagens" },
+    { id: "GIF", rotulo: "Gifs" },
+    { id: "VIDEO", rotulo: "Vídeos" },
+    { id: "AUDIO", rotulo: "Áudios" },
+  ];
+  const ICONE_TIPO: Record<string, string> = {
+    IMAGE: "🖼️",
+    GIF: "🎞️",
+    VIDEO: "🎬",
+    AUDIO: "🔊",
+  };
+  const contaPorTipo = (t: "todos" | TipoMidia) =>
+    t === "todos" ? media.length : media.filter((m) => m.type === t).length;
+  const midiasFiltradas =
+    filtroTipo === "todos" ? media : media.filter((m) => m.type === filtroTipo);
+
   const addControls = (
     <div className="mesa-add">
       <div className="mesa-tools">
@@ -1534,19 +1616,112 @@ export function Mesa({
       </div>
 
       {ferramenta === "midia" && (
-        <div className="mesa-tool-painel">
-          <select value={pickId} onChange={(e) => setPickId(e.target.value)} aria-label="Mídia">
-            <option value="">Escolha uma mídia…</option>
-            {media.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.type === "AUDIO" ? "🔊 " : ""}
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <button className="primary" onClick={handlePlace} disabled={!pickId || placing}>
-            {placing ? "Colocando…" : "Colocar na mesa"}
-          </button>
+        <div className="mesa-tool-painel coluna">
+          <div className="mesa-abas">
+            <button
+              className={`mesa-aba${abaMidia === "biblioteca" ? " ativa" : ""}`}
+              onClick={() => setAbaMidia("biblioteca")}
+            >
+              Biblioteca
+            </button>
+            <button
+              className={`mesa-aba${abaMidia === "enviar" ? " ativa" : ""}`}
+              onClick={() => setAbaMidia("enviar")}
+            >
+              Enviar arquivo
+            </button>
+          </div>
+
+          {abaMidia === "biblioteca" && (
+            <>
+              {/* Filtro por tipo: uma lista unica misturando imagem, gif, video
+                  e audio fica impossivel de achar nada depois de algumas
+                  dezenas de itens. */}
+              <div className="mesa-filtros">
+                {FILTROS_TIPO.map((f) => (
+                  <button
+                    key={f.id}
+                    className={`mesa-filtro${filtroTipo === f.id ? " ativa" : ""}`}
+                    onClick={() => {
+                      setFiltroTipo(f.id);
+                      setPickId("");
+                    }}
+                  >
+                    {f.rotulo}
+                    <span className="mesa-filtro-n">{contaPorTipo(f.id)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mesa-tool-linha">
+                <select
+                  value={pickId}
+                  onChange={(e) => setPickId(e.target.value)}
+                  aria-label="Mídia"
+                  style={{ flex: "1 1 200px" }}
+                >
+                  <option value="">
+                    {midiasFiltradas.length ? "Escolha uma mídia…" : "Nada deste tipo na biblioteca"}
+                  </option>
+                  {midiasFiltradas.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {ICONE_TIPO[m.type] ?? ""} {m.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="primary" onClick={handlePlace} disabled={!pickId || placing}>
+                  {placing ? "Colocando…" : "Colocar na mesa"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {abaMidia === "enviar" && (
+            <>
+              <div className="mesa-tool-linha">
+                <input
+                  type="file"
+                  accept="image/*,video/*,audio/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setEnvArquivo(f);
+                    if (f) {
+                      setEnvTipo(tipoDoArquivo(f.type, f.name));
+                      if (!envNome.trim()) setEnvNome(nomeDoArquivo(f.name));
+                    }
+                  }}
+                />
+              </div>
+              <div className="mesa-tool-linha">
+                <input
+                  placeholder="Nome"
+                  value={envNome}
+                  onChange={(e) => setEnvNome(e.target.value)}
+                  style={{ flex: "1 1 160px" }}
+                />
+                <select
+                  value={envTipo}
+                  onChange={(e) => setEnvTipo(e.target.value as TipoMidia)}
+                  aria-label="Tipo"
+                >
+                  <option value="IMAGE">Imagem</option>
+                  <option value="GIF">Gif</option>
+                  <option value="VIDEO">Vídeo</option>
+                  <option value="AUDIO">Áudio</option>
+                </select>
+                <button
+                  className="primary"
+                  onClick={handleEnviar}
+                  disabled={!envArquivo || enviando}
+                >
+                  {enviando ? "Enviando…" : "Enviar e colocar"}
+                </button>
+              </div>
+              <p className="mesa-bg-note" style={{ margin: 0 }}>
+                O arquivo entra na <strong>sua biblioteca</strong> (ninguém mais a vê) e já
+                vai para a mesa, oculto. O tipo é detectado pelo arquivo — troque se errar.
+              </p>
+            </>
+          )}
         </div>
       )}
 
