@@ -1247,16 +1247,31 @@ export function Mesa({
     };
   }, []);
 
-  // Pan com o botao do MEIO arrastando (como no canvas do Pogly): move a
-  // area visivel sem mexer em nenhum item. E o par natural do zoom na roda —
-  // com a roda dando zoom, ela nao rola mais o viewport.
+  // Pan: Ctrl + botao ESQUERDO arrastando, ou o botao do MEIO. Move a area
+  // visivel sem mexer em nenhum item. E o par natural do zoom na roda — com a
+  // roda dando zoom, ela nao rola mais o viewport, entao o arrasto e o unico
+  // jeito de se deslocar pela mesa.
+  //
+  // O Ctrl e o que separa "arrastar a tela" de "arrastar o item": sem ele, o
+  // botao esquerdo continua movendo o elemento como sempre.
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  // Ha um pan com Ctrl em andamento? Serve para segurar o menu de contexto no
+  // macOS, onde Ctrl + clique equivale ao botao direito.
+  const panComCtrl = useRef(false);
 
+  // Roda na fase de CAPTURA, antes dos handlers dos itens: com Ctrl segurado
+  // precisamos barrar o evento (stopPropagation) para o item sob o cursor nao
+  // comecar a ser arrastado junto com a tela.
   function onViewportPointerDown(e: React.PointerEvent) {
-    if (e.button !== 1) return; // so o botao do meio
+    const comCtrl = e.button === 0 && (e.ctrlKey || e.metaKey);
+    if (e.button !== 1 && !comCtrl) return;
     const el = viewportRef.current;
     if (!el) return;
     e.preventDefault();
+    if (comCtrl) {
+      e.stopPropagation();
+      panComCtrl.current = true;
+    }
     panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
     el.classList.add("panning");
     el.setPointerCapture(e.pointerId);
@@ -1270,11 +1285,23 @@ export function Mesa({
     const soltar = () => {
       panRef.current = null;
       el.classList.remove("panning");
+      // Solta o travamento do menu de contexto so no proximo quadro: no macOS
+      // o contextmenu chega depois do pointerup.
+      if (panComCtrl.current) {
+        requestAnimationFrame(() => {
+          panComCtrl.current = false;
+        });
+      }
       window.removeEventListener("pointermove", mover);
       window.removeEventListener("pointerup", soltar);
     };
     window.addEventListener("pointermove", mover);
     window.addEventListener("pointerup", soltar);
+  }
+
+  // No macOS, Ctrl + clique abre o menu de contexto; aqui esse gesto e o pan.
+  function onViewportContextMenu(e: React.MouseEvent) {
+    if (panComCtrl.current || e.ctrlKey || e.metaKey) e.preventDefault();
   }
 
   // Zoom com a roda do mouse, centrado no ponteiro. Aumentamos o palco
@@ -1287,7 +1314,7 @@ export function Mesa({
     function onWheel(e: WheelEvent) {
       // A roda SEMPRE da zoom sobre a mesa, nos dois modos. O viewport nao
       // rola mais (overflow:hidden), entao nao ha rolagem para disputar com
-      // ela; para se deslocar, use o botao do meio.
+      // ela; para se deslocar, arraste com Ctrl (ou com o botao do meio).
       e.preventDefault(); // evita o zoom do navegador
       const el = viewportRef.current;
       if (!el) return;
@@ -1710,15 +1737,21 @@ export function Mesa({
           </button>
         )}
         <span className="mesa-audio-note">
-          Roda do mouse dá zoom (centrado no ponteiro) e o botão do meio arrasta a
-          tela. Abaixo de 1× você enxerga o que está estacionado fora. Só muda a
+          Roda do mouse dá zoom (centrado no ponteiro). Para andar pela mesa,
+          arraste segurando <strong>Ctrl</strong> (ou com o botão do meio).
+          Abaixo de 1× você enxerga o que está estacionado fora. Só muda a
           visualização, não afeta o overlay.
         </span>
       </div>
   );
 
   const stage = (
-      <div className="mesa-viewport" ref={viewportRef} onPointerDown={onViewportPointerDown}>
+      <div
+        className="mesa-viewport"
+        ref={viewportRef}
+        onPointerDownCapture={onViewportPointerDown}
+        onContextMenu={onViewportContextMenu}
+      >
         <div
           ref={stageRef}
           className={`mesa-stage${altHeld ? " alt-remodelar" : ""}`}
