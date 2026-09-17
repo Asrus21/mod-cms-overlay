@@ -8,6 +8,7 @@ import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos } from "@/lib/stage";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { nomeDoArquivo, tipoDoArquivo, type TipoMidia } from "@/lib/media-tipo";
+import { filtrarEmotes, type Emote } from "@/lib/emotes";
 import {
   QUALIDADES,
   QUALIDADE_PADRAO,
@@ -173,6 +174,13 @@ export function Mesa({
   // "Area de transferencia" da mesa: guarda uma copia do item selecionado
   // (Ctrl+C) para colar (Ctrl+V) exatamente igual, com um leve deslocamento.
   const clipboardRef = useRef<PlacedItem | null>(null);
+  // Midias que a propria mesa cadastrou nesta sessao, por URL.
+  //
+  // Serve para o mesmo emote clicado duas vezes nao virar duas linhas na
+  // biblioteca. Nao da para confiar so na lista `media` que vem por prop: ela
+  // e recarregada pelo componente de cima e a resposta pode nao ter chegado
+  // ainda quando o segundo clique acontece.
+  const cadastradasAqui = useRef<Map<string, Media>>(new Map());
 
   const [items, setItems] = useState<PlacedItem[]>([]);
   // Espelho para os handlers de ponteiro lerem o estado atual sem "stale".
@@ -202,7 +210,13 @@ export function Mesa({
   // fica guardada no navegador para não voltar desligada a cada visita.
   const [grade, setGrade] = useState(false);
   // Painel de mídia: aba aberta e filtro por tipo da biblioteca.
-  const [abaMidia, setAbaMidia] = useState<"biblioteca" | "enviar">("biblioteca");
+  const [abaMidia, setAbaMidia] = useState<"biblioteca" | "enviar" | "emotes">("biblioteca");
+  // Emotes do canal (Twitch + 7TV/BTTV/FFZ), carregados sob demanda.
+  const [emotes, setEmotes] = useState<Emote[]>([]);
+  const [emotesFontes, setEmotesFontes] = useState<Record<string, { ok: boolean; total: number; erro?: string }>>({});
+  const [emotesEstado, setEmotesEstado] = useState<"vazio" | "carregando" | "pronto" | "erro">("vazio");
+  const [emotesErro, setEmotesErro] = useState("");
+  const [buscaEmote, setBuscaEmote] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | TipoMidia>("todos");
   // Envio de arquivo direto da mesa.
   const [envArquivo, setEnvArquivo] = useState<File | null>(null);
@@ -508,6 +522,7 @@ export function Mesa({
         throw new Error(data.error || "Falha ao cadastrar a mídia");
       }
       const { media: criada } = (await criar.json()) as { media: Media };
+      if (criada) cadastradasAqui.current.set(url, criada);
 
       setEnvArquivo(null);
       setEnvNome("");
@@ -518,6 +533,81 @@ export function Mesa({
       alert(err instanceof Error ? err.message : "Erro ao enviar");
     } finally {
       setEnviando(false);
+    }
+  }
+
+  // Carrega os emotes do canal na primeira vez que a aba abre (e a cada troca
+  // de streamer). Sao quatro consultas externas la no servidor, entao nao vale
+  // fazer isso no carregamento da mesa.
+  useEffect(() => {
+    if (abaMidia !== "emotes" || !streamerSlug) return;
+    let vivo = true;
+    setEmotesEstado("carregando");
+    setEmotesErro("");
+    fetch(`/api/emotes?streamer=${encodeURIComponent(streamerSlug)}`)
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || "Falha ao buscar os emotes");
+        return data as { emotes: Emote[]; fontes: Record<string, { ok: boolean; total: number; erro?: string }> };
+      })
+      .then((data) => {
+        if (!vivo) return;
+        setEmotes(data.emotes || []);
+        setEmotesFontes(data.fontes || {});
+        setEmotesEstado("pronto");
+      })
+      .catch((err: unknown) => {
+        if (!vivo) return;
+        setEmotesErro(err instanceof Error ? err.message : "Falha ao buscar os emotes");
+        setEmotesEstado("erro");
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [abaMidia, streamerSlug]);
+
+  // Coloca um emote na mesa.
+  //
+  // Um emote e uma imagem hospedada fora, entao precisa virar uma midia da
+  // biblioteca antes: as rotas de disparo exigem mediaId para imagem/gif, e e
+  // isso que faz o item voltar ao recarregar o OBS e caber numa cena salva.
+  // Se o mesmo emote ja tiver sido usado antes, reaproveitamos o registro em
+  // vez de encher a biblioteca de copias.
+  async function colocarEmote(e: Emote) {
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro (campo Streamer acima).");
+      return;
+    }
+    if (placing) return;
+    const jaTem = cadastradasAqui.current.get(e.url) ?? media.find((m) => m.url === e.url);
+    if (jaTem) {
+      await colocarNaMesa(jaTem);
+      return;
+    }
+    setPlacing(true);
+    try {
+      const res = await fetch("/api/media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: e.nome,
+          type: e.animado ? "GIF" : "IMAGE",
+          url: e.url,
+          tags: ["emote", e.origem],
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao cadastrar o emote");
+      }
+      const { media: criada } = (await res.json()) as { media: Media };
+      if (criada) cadastradasAqui.current.set(e.url, criada);
+      onAction();
+      if (criada) await colocarNaMesa(criada);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao colocar o emote");
+    } finally {
+      setPlacing(false);
     }
   }
 
@@ -1582,6 +1672,17 @@ export function Mesa({
   const midiasFiltradas =
     filtroTipo === "todos" ? media : media.filter((m) => m.type === filtroTipo);
 
+  const ROTULO_ORIGEM: Record<string, string> = {
+    twitch: "Twitch",
+    "7tv": "7TV",
+    bttv: "BTTV",
+    ffz: "FFZ",
+  };
+  const emotesVisiveis = filtrarEmotes(emotes, buscaEmote);
+  const fontesComFalha = Object.entries(emotesFontes)
+    .filter(([, e]) => !e.ok)
+    .map(([nome]) => ROTULO_ORIGEM[nome] ?? nome);
+
   const addControls = (
     <div className="mesa-add">
       <div className="mesa-tools">
@@ -1629,6 +1730,12 @@ export function Mesa({
               onClick={() => setAbaMidia("enviar")}
             >
               Enviar arquivo
+            </button>
+            <button
+              className={`mesa-aba${abaMidia === "emotes" ? " ativa" : ""}`}
+              onClick={() => setAbaMidia("emotes")}
+            >
+              Emotes
             </button>
           </div>
 
@@ -1720,6 +1827,65 @@ export function Mesa({
                 O arquivo entra na <strong>sua biblioteca</strong> (ninguém mais a vê) e já
                 vai para a mesa, oculto. O tipo é detectado pelo arquivo — troque se errar.
               </p>
+            </>
+          )}
+
+          {abaMidia === "emotes" && (
+            <>
+              <div className="mesa-tool-linha">
+                <input
+                  placeholder="Buscar emote…"
+                  value={buscaEmote}
+                  onChange={(e) => setBuscaEmote(e.target.value)}
+                  style={{ flex: "1 1 160px" }}
+                />
+                <span className="mesa-audio-note">
+                  {emotesEstado === "pronto" ? `${emotesVisiveis.length} de ${emotes.length}` : ""}
+                </span>
+              </div>
+
+              {emotesEstado === "carregando" && (
+                <p className="mesa-bg-note" style={{ margin: 0 }}>Buscando os emotes do canal…</p>
+              )}
+              {emotesEstado === "erro" && <p className="scene-erro">⚠️ {emotesErro}</p>}
+
+              {emotesEstado === "pronto" && (
+                <>
+                  {emotes.length === 0 ? (
+                    <p className="mesa-bg-note" style={{ margin: 0 }}>
+                      Nenhum emote encontrado para este canal.
+                    </p>
+                  ) : (
+                    <ul className="mesa-emotes">
+                      {emotesVisiveis.slice(0, 200).map((e) => (
+                        <li key={`${e.origem}:${e.id}`}>
+                          <button
+                            className="mesa-emote"
+                            onClick={() => colocarEmote(e)}
+                            disabled={placing}
+                            title={`${e.nome} · ${ROTULO_ORIGEM[e.origem]}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={e.url} alt={e.nome} loading="lazy" />
+                            <span className="mesa-emote-nome">{e.nome}</span>
+                            <span className="mesa-emote-origem" data-origem={e.origem}>
+                              {ROTULO_ORIGEM[e.origem]}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {/* Uma fonte fora do ar nao pode passar despercebida como
+                      "o canal nao tem emotes". */}
+                  {fontesComFalha.length > 0 && (
+                    <p className="mesa-bg-note" style={{ margin: 0 }}>
+                      Não deu para consultar: <strong>{fontesComFalha.join(", ")}</strong>.
+                      Os demais emotes estão aí.
+                    </p>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>

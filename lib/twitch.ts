@@ -122,6 +122,66 @@ export async function getModeratedChannels(
   return out;
 }
 
+// --- Token de aplicativo (client credentials) --------------------------
+//
+// Usado para consultas que nao sao de ninguem em particular: o id de um canal
+// e os emotes dele. Nao serve para nada que dependa do usuario logado.
+//
+// O token da Twitch dura ~60 dias, entao guardamos em memoria e so pedimos
+// outro perto de expirar. Em serverless o processo morre a qualquer momento e
+// o cache simplesmente comeca vazio de novo — o que custa uma chamada a mais,
+// nao um erro.
+let tokenApp: { valor: string; expiraEm: number } | null = null;
+
+export async function getAppToken(): Promise<string> {
+  const agora = Date.now();
+  if (tokenApp && tokenApp.expiraEm > agora + 60_000) return tokenApp.valor;
+  if (!twitchConfigured()) {
+    throw new Error("Twitch nao configurada no servidor (TWITCH_CLIENT_ID/SECRET).");
+  }
+  const body = new URLSearchParams({
+    client_id: clientId(),
+    client_secret: clientSecret(),
+    grant_type: "client_credentials",
+  });
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) {
+    throw new Error(`Falha ao obter token de aplicativo da Twitch (HTTP ${res.status})`);
+  }
+  const data = (await res.json()) as { access_token?: string; expires_in?: number };
+  if (!data.access_token) throw new Error("Twitch nao devolveu token de aplicativo");
+  tokenApp = {
+    valor: data.access_token,
+    expiraEm: agora + (data.expires_in ?? 3600) * 1000,
+  };
+  return tokenApp.valor;
+}
+
+// Id numerico de um canal a partir do login. Null quando o canal nao existe.
+export async function getUserIdByLogin(login: string): Promise<string | null> {
+  const token = await getAppToken();
+  const res = await fetch(`${HELIX}/users?login=${encodeURIComponent(login)}`, {
+    headers: { Authorization: `Bearer ${token}`, "Client-Id": clientId() },
+  });
+  if (!res.ok) throw new Error(`Falha ao consultar o canal (HTTP ${res.status})`);
+  const data = (await res.json()) as { data?: { id?: string }[] };
+  return data.data?.[0]?.id || null;
+}
+
+// Emotes proprios do canal (sub, bits, follower) pela Helix.
+export async function getChannelEmotes(broadcasterId: string): Promise<unknown> {
+  const token = await getAppToken();
+  const res = await fetch(`${HELIX}/chat/emotes?broadcaster_id=${encodeURIComponent(broadcasterId)}`, {
+    headers: { Authorization: `Bearer ${token}`, "Client-Id": clientId() },
+  });
+  if (!res.ok) throw new Error(`Falha ao listar emotes do canal (HTTP ${res.status})`);
+  return res.json();
+}
+
 // Login do usuario "master": ve todos os moderados + pode buscar qualquer
 // streamer. Configuravel; padrao "asrus12".
 export function masterLogin(): string {

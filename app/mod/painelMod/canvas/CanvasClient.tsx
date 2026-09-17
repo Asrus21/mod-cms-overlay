@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Mesa } from "../Mesa";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
@@ -70,7 +70,11 @@ export function CanvasClient({
   }, []);
 
   // Biblioteca de midias do usuario (para o seletor "Colocar na mesa").
-  useEffect(() => {
+  //
+  // Recarregavel: a mesa agora cadastra midia sozinha (envio de arquivo e
+  // emotes), entao ela precisa avisar para a lista nao ficar velha ate alguem
+  // recarregar a pagina.
+  const carregarMidia = useCallback(() => {
     fetch("/api/media")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -78,6 +82,10 @@ export function CanvasClient({
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    carregarMidia();
+  }, [carregarMidia]);
 
   function pick(slug: string) {
     const entry = lista.find((s) => s.slug === slug);
@@ -141,7 +149,7 @@ export function CanvasClient({
         modSlug={modSlug}
         streamerSlug={streamer?.slug ?? ""}
         streamerName={streamer?.name ?? ""}
-        onAction={() => {}}
+        onAction={carregarMidia}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}
         twitchChannel={twitchChannel}
