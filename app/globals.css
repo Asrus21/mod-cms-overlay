@@ -1886,3 +1886,46 @@ button:disabled {
   background: #0b0d12;
   color: #e6e8ee;
 }
+
+/* Pagina do player da Twitch (/mod/player/twitch), usada como item EMBED da
+   mesa. So o player: sem margem, sem fundo, preenchendo o retangulo do item. */
+.twitch-player {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+}
+.twitch-alvo,
+.twitch-alvo iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.twitch-erro {
+  margin: 0;
+  padding: 0.6rem;
+  font-size: 0.85rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* Campos do item "transmissao da Twitch" na barra de insercao. */
+.mesa-twitch-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.mesa-twitch-linha select {
+  flex: 0 0 auto;
+}
+.mesa-twitch-audio {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
