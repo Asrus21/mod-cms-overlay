@@ -1,10 +1,12 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos } from "@/lib/stage";
+import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import {
   QUALIDADES,
   QUALIDADE_PADRAO,
@@ -185,6 +187,16 @@ export function Mesa({
   // Caixa "Feed ao vivo": o mod cola o link do player (relay do OBS dele) e vira
   // um item na mesa — aparece no mesmo overlay do streamer que as demais midias.
   const [embedInput, setEmbedInput] = useState("");
+  // Menu da engrenagem: ajustes da mesa, link do OBS e a lista de atalhos.
+  const [configAberto, setConfigAberto] = useState(false);
+  // Aviso de "copiado" do link do OBS, que volta ao normal sozinho.
+  const [copiado, setCopiado] = useState(false);
+  // O menu vai para o body por portal, entao so pode ser montado no cliente.
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+  // Grade de alinhamento sobre o palco. Só visual (não vai para o overlay);
+  // fica guardada no navegador para não voltar desligada a cada visita.
+  const [grade, setGrade] = useState(false);
   // Transmissão da Twitch: canal, qualidade e se entra com áudio.
   const [twitchCanal, setTwitchCanal] = useState("");
   const [twitchQ, setTwitchQ] = useState<QualidadeId>(QUALIDADE_PADRAO);
@@ -574,10 +586,11 @@ export function Mesa({
       return;
     }
     // A URL precisa ser absoluta: o item e um EMBED e a rota de disparo exige
-    // um link http(s). A origem e a mesma de onde o painel esta aberto, entao
-    // o player sai pelo mesmo dominio do overlay.
+    // um link http(s). Usamos o dominio canonico (e nao o endereco aberto no
+    // momento) porque o link fica GRAVADO no item: montado a partir de um
+    // preview do Vercel, ele continuaria apontando para o preview depois.
     const link =
-      urlDoPlayer(window.location.origin, canal, twitchQ) + (twitchAudio ? "&audio=1" : "");
+      urlDoPlayer(PUBLIC_ORIGIN, canal, twitchQ) + (twitchAudio ? "&audio=1" : "");
 
     const itemId = genId();
     const placed: PlacedItem = {
@@ -1180,6 +1193,14 @@ export function Mesa({
   // enquanto o mod estiver digitando em algum campo (input/textarea/select).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Esc fecha o menu de configuracoes ANTES da checagem abaixo: o foco
+      // costuma estar num campo dele (caixa, seletor), e ai a tecla seria
+      // ignorada e o menu nao fecharia.
+      if (e.key === "Escape" && configAberto) {
+        setConfigAberto(false);
+        return;
+      }
+
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
@@ -1225,12 +1246,13 @@ export function Mesa({
 
       if (e.key === "Escape") {
         setSelectedId("");
+        setConfigAberto(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, streamerSlug]);
+  }, [selectedId, streamerSlug, configAberto]);
 
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => { if (e.altKey) setAltHeld(true); };
@@ -1246,6 +1268,37 @@ export function Mesa({
       window.removeEventListener("blur", onBlur);
     };
   }, []);
+
+  useEffect(() => {
+    if (!copiado) return;
+    const t = setTimeout(() => setCopiado(false), 2000);
+    return () => clearTimeout(t);
+  }, [copiado]);
+
+  // A grade fica guardada no navegador (so preferencia visual deste mod).
+  //
+  // A leitura e num efeito de montagem (nao no estado inicial) porque o HTML e
+  // gerado no servidor, onde nao ha localStorage — ler no render daria
+  // divergencia de hidratacao. E a gravacao acontece na propria troca, NAO num
+  // efeito com [grade]: um efeito desses tambem dispara na montagem, com o
+  // valor padrao, e apagaria a preferencia guardada antes de le-la.
+  const GRADE_KEY = "bastidores:grade";
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(GRADE_KEY) === "1") setGrade(true);
+    } catch {
+      /* navegador sem storage (anonimo, OBS): segue desligada */
+    }
+  }, []);
+
+  function trocarGrade(ligada: boolean) {
+    setGrade(ligada);
+    try {
+      localStorage.setItem(GRADE_KEY, ligada ? "1" : "0");
+    } catch {
+      /* idem: a preferencia so nao sobrevive ao recarregar */
+    }
+  }
 
   // Pan: Ctrl + botao ESQUERDO arrastando, ou o botao do MEIO. Move a area
   // visivel sem mexer em nenhum item. E o par natural do zoom na roda — com a
@@ -1745,6 +1798,114 @@ export function Mesa({
       </div>
   );
 
+  // Menu da engrenagem.
+  //
+  // Junta o que estava espalhado pela tela (fundo da mesa, zoom, link do OBS)
+  // e, principalmente, DOCUMENTA os atalhos: ate agora eles existiam mas nao
+  // apareciam em lugar nenhum, entao so servia para quem ja soubesse.
+  const ATALHOS: ReadonlyArray<{ tecla: string; oque: string }> = [
+    { tecla: "1 … 9, 0", oque: "Mostra/esconde o elemento daquela posição na lista" },
+    { tecla: "Espaço", oque: "Mostra/esconde o elemento selecionado" },
+    { tecla: "Esc", oque: "Tira a seleção (e fecha este menu)" },
+    { tecla: "Ctrl + C", oque: "Copia o elemento selecionado" },
+    { tecla: "Ctrl + V", oque: "Cola a cópia, do mesmo jeito e um pouco ao lado" },
+    { tecla: "Roda do mouse", oque: "Zoom da visualização, centrado no ponteiro" },
+    { tecla: "Ctrl + arrastar", oque: "Anda pela mesa (o botão do meio também)" },
+    { tecla: "Alt + arrastar", oque: "Remodela o elemento livremente" },
+    { tecla: "Arrastar as bordas", oque: "Cantos: largura e altura · laterais: largura · topo/base: altura" },
+  ];
+
+  const obsUrl = streamerSlug ? `${PUBLIC_ORIGIN}/overlay/${streamerSlug}` : "";
+
+  const configControls = (
+    <div className="mesa-config-wrap">
+      <button
+        className={`mesa-config-btn${configAberto ? " ativa" : ""}`}
+        onClick={() => setConfigAberto((v) => !v)}
+        aria-expanded={configAberto}
+        aria-label="Configurações da mesa"
+        title="Configurações da mesa"
+      >
+        <span aria-hidden="true">⚙️</span>
+      </button>
+
+      {/* Vai para o <body> por portal. Na tela cheia a engrenagem fica dentro
+          de .canvas-panel, que tem backdrop-filter — e isso faz o painel virar
+          o bloco que contem ate os filhos `position: fixed`. Sem o portal, o
+          menu ficava preso e cortado ali dentro, e o item da mesa por baixo e
+          que recebia os cliques. */}
+      {configAberto && montado && createPortal(
+        <>
+          {/* Fundo clicavel: fecha o menu e impede que a mesa receba clique
+              enquanto ele esta aberto. */}
+          <div className="mesa-config-fundo" onClick={() => setConfigAberto(false)} />
+        <div className="mesa-config" role="dialog" aria-modal="true" aria-label="Configurações da mesa">
+          <div className="mesa-config-topo">
+            <strong>Configurações</strong>
+            <button
+              className="mesa-config-fechar"
+              onClick={() => setConfigAberto(false)}
+              aria-label="Fechar"
+            >
+              ✕
+            </button>
+          </div>
+
+          <section className="mesa-config-bloco">
+            <h4>Visualização</h4>
+            {bgControls}
+            {zoomControls}
+            <label className="mesa-config-opcao">
+              <input
+                type="checkbox"
+                checked={grade}
+                onChange={(e) => trocarGrade(e.target.checked)}
+              />
+              Grade de alinhamento
+              <span className="mesa-audio-note">
+                Só aqui na mesa — não aparece na live.
+              </span>
+            </label>
+          </section>
+
+          {obsUrl && (
+            <section className="mesa-config-bloco">
+              <h4>Link do OBS</h4>
+              <p className="mesa-config-link">{obsUrl}</p>
+              <button
+                onClick={() => {
+                  navigator.clipboard
+                    ?.writeText(obsUrl)
+                    .then(() => setCopiado(true))
+                    .catch(() => setCopiado(false));
+                }}
+              >
+                {copiado ? "Copiado!" : "Copiar link do OBS"}
+              </button>
+              <span className="mesa-audio-note">
+                Fonte de Navegador no OBS, 1920×1080, com fundo transparente.
+              </span>
+            </section>
+          )}
+
+          <section className="mesa-config-bloco">
+            <h4>Atalhos</h4>
+            <dl className="mesa-atalhos">
+              {ATALHOS.map((a) => (
+                <div key={a.tecla} className="mesa-atalho">
+                  <dt>{a.tecla}</dt>
+                  <dd>{a.oque}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+
   const stage = (
       <div
         className="mesa-viewport"
@@ -1754,7 +1915,7 @@ export function Mesa({
       >
         <div
           ref={stageRef}
-          className={`mesa-stage${altHeld ? " alt-remodelar" : ""}`}
+          className={`mesa-stage${altHeld ? " alt-remodelar" : ""}${grade ? " com-grade" : ""}`}
           style={
             {
               "--zoom": zoom,
@@ -2043,8 +2204,7 @@ export function Mesa({
         <aside className="canvas-panel canvas-panel-right">
           <h3 className="canvas-panel-title">ajustes</h3>
           {audioControls}
-          {bgControls}
-          {zoomControls}
+          {configControls}
         </aside>
 
         <div className="canvas-toolbar">{addControls}</div>
@@ -2065,9 +2225,8 @@ export function Mesa({
       </p>
       {addControls}
       {sceneControls}
-      {bgControls}
       {audioControls}
-      {zoomControls}
+      {configControls}
       {stage}
     </section>
   );

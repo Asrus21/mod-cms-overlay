@@ -1932,3 +1932,185 @@ button:disabled {
   font-size: 0.8rem;
   white-space: nowrap;
 }
+
+/* --- Menu da engrenagem (configurações da mesa) --- */
+.mesa-config-wrap {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin: 0.4rem 0;
+}
+.mesa-config-btn {
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.05rem;
+  line-height: 1;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mesa-config-btn.ativa {
+  outline: 2px solid var(--accent, #8b5cf6);
+  outline-offset: 1px;
+}
+
+/* Fixo e centralizado, NAO ancorado no botao: na tela cheia a engrenagem fica
+   dentro de .canvas-panel, que tem overflow:auto e z-index proprio. Um popup
+   absoluto ali era cortado ao passar da borda do painel, e a parte de fora
+   deixava de receber clique — quem pegava era o item da mesa por baixo. Fixo
+   no viewport, com z-index acima de tudo, o problema nao existe nos dois
+   modos. */
+.mesa-config-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.45);
+}
+.mesa-config {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 61;
+  width: min(23rem, calc(100vw - 2rem));
+  max-height: min(80vh, 40rem);
+  overflow-y: auto;
+  padding: 0.7rem 0.8rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--borda, rgba(255, 255, 255, 0.16));
+  background: var(--fundo-card, #15151c);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  text-align: left;
+}
+.mesa-config-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.mesa-config-fechar {
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+.mesa-config-bloco {
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+  border-top: 1px solid var(--borda, rgba(255, 255, 255, 0.12));
+}
+.mesa-config-bloco:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.mesa-config-bloco h4 {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+}
+.mesa-config-opcao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+.mesa-config-link {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  word-break: break-all;
+  opacity: 0.8;
+}
+
+/* Lista dos atalhos: tecla à esquerda, o que faz à direita. Ate agora os
+   atalhos existiam mas nao eram documentados em lugar nenhum. */
+.mesa-atalhos {
+  margin: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.mesa-atalho {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+.mesa-atalho dt {
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  opacity: 0.95;
+}
+.mesa-atalho dd {
+  margin: 0;
+  opacity: 0.78;
+}
+@media (max-width: 480px) {
+  .mesa-atalho {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* Grade de alinhamento: so na mesa, nunca no overlay. Duas camadas — linha
+   fina a cada 1/20 do palco e linha mais marcada a cada 1/4. */
+.mesa-stage.com-grade::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Zero, nao 1: os itens vem depois no DOM e ficam por cima da grade. */
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 25% 25%, 25% 25%, 5% 5%, 5% 5%;
+}
+
+/* As linhas de fundo e zoom nasceram para uma barra larga; dentro do menu (23rem)
+   elas precisam empilhar, senao a nota explicativa vira uma coluna estreita ao
+   lado do controle. */
+.mesa-config .mesa-bg-row,
+.mesa-config .mesa-zoom-row {
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem;
+  margin-bottom: 0;
+}
+.mesa-config .mesa-zoom-row input[type="range"] {
+  max-width: none;
+  min-width: 8rem;
+}
+/* A nota sempre na propria linha, ocupando a largura toda. */
+.mesa-config .mesa-audio-note,
+.mesa-config .mesa-bg-note {
+  flex: 1 0 100%;
+  margin: 0;
+  line-height: 1.4;
+}
+.mesa-config .mesa-bg-row select,
+.mesa-config .mesa-bg-row input[type="text"],
+.mesa-config .mesa-bg-row input[type="url"] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.mesa-config-bloco > button {
+  margin-right: 0.5rem;
+}
+/* Dentro de um bloco (que e block, nao flex) a nota precisa ir para a propria
+   linha por conta propria, senao envolve o botao ao lado. */
+.mesa-config-bloco > .mesa-audio-note {
+  display: block;
+  margin-top: 0.45rem;
+  line-height: 1.4;
+}
