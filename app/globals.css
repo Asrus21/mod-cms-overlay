@@ -1729,29 +1729,9 @@ button:disabled {
   line-height: 1.4;
 }
 
-/* Item estacionado fora da area visivel: continua na mesa, mas NAO aparece na
-   live (o overlay corta). Fica esmaecido e tracejado para o mod nao confundir
-   com um item no ar. */
-.mesa-item.offstage,
-.mesa-audio-badge.offstage {
-  opacity: 0.4;
-  outline: 2px dashed rgba(255, 255, 255, 0.5);
-  outline-offset: 3px;
-}
-.mesa-item.offstage::after {
-  content: "fora da tela";
-  position: absolute;
-  left: 50%;
-  bottom: -1.4rem;
-  transform: translateX(-50%);
-  font-size: 0.7rem;
-  white-space: nowrap;
-  padding: 0.1rem 0.4rem;
-  border-radius: 5px;
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
-  pointer-events: none;
-}
+/* NAO ha marcacao visual para item estacionado fora do palco: ele aparece na
+   mesa exatamente como foi criado, dentro ou fora. Quem indica o que vai ao ar
+   e o proprio retangulo do palco. */
 
 /* Pan em andamento (botao do meio): cursor de agarrar e sem selecao de texto. */
 .mesa-viewport.panning {

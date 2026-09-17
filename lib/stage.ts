@@ -14,10 +14,9 @@
 // borda somado a metade da largura dele (x >= 1 + largura/2). Com 0.5 ate um
 // item do tamanho da tela inteira some por completo.
 //
-// Este numero anda junto com o padding de .mesa-viewport.tem-offstage no
-// globals.css: a margem visivel precisa cobrir todo este alcance, senao o mod
-// nao consegue agarrar de volta o que estacionou. A relacao e
-// padding% / (100 - 2*padding%) = OFFSTAGE — com 25%, da exatamente 0.5.
+// Este numero anda junto com o padding de .mesa-viewport no globals.css: a
+// margem visivel precisa cobrir todo este alcance, senao o mod nao consegue
+// agarrar de volta o que estacionou.
 export const OFFSTAGE = 0.5;
 export const MIN_POS = -OFFSTAGE;
 export const MAX_POS = 1 + OFFSTAGE;
@@ -25,9 +24,4 @@ export const MAX_POS = 1 + OFFSTAGE;
 export function clampPos(v: number): number {
   if (Number.isNaN(v)) return 0.5;
   return Math.min(MAX_POS, Math.max(MIN_POS, v));
-}
-
-// O item esta fora da area que aparece na live?
-export function isOffstage(x: number, y: number): boolean {
-  return x < 0 || x > 1 || y < 0 || y > 1;
 }
