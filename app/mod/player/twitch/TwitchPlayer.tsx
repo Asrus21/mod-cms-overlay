@@ -16,6 +16,7 @@ const SCRIPT = "https://player.twitch.tv/js/embed/v1.js";
 // Tipos minimos do que usamos da API do embed (ela nao tem @types).
 type PlayerTwitch = {
   getQualities(): QualidadeDisponivel[];
+  getQuality(): string;
   setQuality(group: string): void;
   addEventListener(evento: string, fn: () => void): void;
   setMuted(m: boolean): void;
@@ -67,28 +68,57 @@ export function TwitchPlayer({
     let player: PlayerTwitch | null = null;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // A lista de qualidades so fica pronta um pouco DEPOIS de comecar a tocar,
-    // e a Twitch pode reescolher sozinha ao reconectar. Por isso aplicamos
-    // algumas vezes em vez de uma so.
+    // CUIDADO AO MEXER AQUI: setQuality REINICIA a reproducao, e todo reinicio
+    // dispara PLAYING de novo. Chamar setQuality a cada PLAYING, como se fazia
+    // antes, se alimenta sozinho: o video reinicia sem parar e nunca chega a
+    // carregar. Medido com a API dublada: ~600 mil chamadas em 8 segundos.
+    //
+    // Por isso duas travas:
+    //  - nao mexer quando o player JA esta na qualidade pedida (o caso normal
+    //    depois da primeira vez, que zera as chamadas em regime);
+    //  - e um intervalo minimo entre duas trocas, para um reinicio de verdade
+    //    da live ainda poder ser corrigido, mas nunca virar laco.
+    const INTERVALO_MIN_MS = 10_000;
+    const MAX_ESPERAS = 12;
+    let ultimaTroca = 0;
+    let esperas = 0;
+
     const aplicar = () => {
       if (!vivo || !player) return;
+
       let grupo: string | null = null;
       try {
         grupo = escolherQualidade(qualidade, player.getQualities());
       } catch {
         grupo = null;
       }
-      if (grupo) {
-        try {
-          player.setQuality(grupo);
-        } catch {
-          /* o player some entre o evento e a chamada; nada a fazer */
+
+      // A lista de qualidades so fica pronta um pouco depois de comecar a
+      // tocar. Enquanto nao vier, tenta de novo — com teto, para nao ficar
+      // consultando para sempre num canal fora do ar.
+      if (!grupo) {
+        if (esperas < MAX_ESPERAS) {
+          esperas++;
+          timers.push(setTimeout(aplicar, 600));
         }
+        return;
       }
-    };
-    const aplicarComInsistencia = () => {
-      aplicar();
-      for (const ms of [500, 1500, 4000]) timers.push(setTimeout(aplicar, ms));
+
+      // Ja esta no que foi pedido: mexer aqui so reiniciaria o video a toa.
+      try {
+        if (player.getQuality() === grupo) return;
+      } catch {
+        /* player sem getQuality: segue para o intervalo minimo abaixo */
+      }
+
+      const agora = Date.now();
+      if (agora - ultimaTroca < INTERVALO_MIN_MS) return;
+      ultimaTroca = agora;
+      try {
+        player.setQuality(grupo);
+      } catch {
+        /* o player some entre o evento e a chamada; nada a fazer */
+      }
     };
 
     carregarScript()
@@ -110,8 +140,8 @@ export function TwitchPlayer({
           // audio da propria live entraria em cima do audio do streamer.
           muted: !comAudio,
         });
-        player.addEventListener(window.Twitch.Player.PLAYING, aplicarComInsistencia);
-        player.addEventListener(window.Twitch.Player.READY, aplicarComInsistencia);
+        player.addEventListener(window.Twitch.Player.PLAYING, aplicar);
+        player.addEventListener(window.Twitch.Player.READY, aplicar);
       })
       .catch((e: unknown) => {
         if (vivo) setErro(e instanceof Error ? e.message : "Falha no player");
