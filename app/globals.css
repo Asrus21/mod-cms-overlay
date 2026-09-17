@@ -490,18 +490,17 @@ a {
    dentro dela e a posição é espelhada no OBS. */
 /* Viewport com scroll: quando o zoom aumenta o palco, sobra para rolar. */
 .mesa-viewport {
-  /* hidden, nao auto: a roda do mouse da zoom, entao rolagem nao faz sentido
-     aqui. O pan (Ctrl + arrastar, ou botao do meio) continua funcionando
-     porque scrollLeft/Top
-     seguem programaveis mesmo com overflow:hidden. */
+  /* hidden: a roda do mouse da zoom e o deslocamento e uma translacao livre
+     do palco (--pan-x/--pan-y), nao rolagem. O viewport e so a janela por
+     onde se enxerga a mesa. */
   overflow: hidden;
   max-height: 75vh;
   border-radius: 10px;
   /* Margem CONSTANTE. Ja foi condicional (crescia quando havia item fora da
      tela) e isso dava um solavanco de zoom toda vez que um item entrava ou
      saia. Para alcancar o que esta estacionado longe, use zoom out (roda do
-     mouse) e pan (Ctrl + arrastar, ou botao do meio) — sem a mesa mudar de
-     tamanho sozinha. */
+     mouse) e o deslocamento (Ctrl + arrastar, ou botao do meio) — sem a mesa
+     mudar de tamanho sozinha. */
   padding: 8%;
 }
 
@@ -522,6 +521,11 @@ a {
   position: relative;
   container-type: inline-size; /* para o texto escalar com a largura do palco (cqw) */
   width: calc(var(--zoom, 1) * 100%); /* zoom da previa (nao afeta o overlay) */
+  /* Deslocamento livre da mesa (Ctrl + arrastar). E transform, nao rolagem:
+     nao tem limite e move o palco inteiro — fundo, borda e itens juntos —
+     em qualquer direcao. Escrito por Mesa.tsx direto no elemento, para o
+     arrasto nao custar um re-render por quadro. */
+  translate: var(--pan-x, 0px) var(--pan-y, 0px);
   aspect-ratio: 16 / 9;
   border: 1px solid #2a2f3a;
   border-radius: 10px;
@@ -1433,7 +1437,8 @@ button:disabled {
   position: fixed;
   inset: 0;
   max-height: none;
-  overflow: auto;
+  /* hidden como no painel: quem desloca e o --pan do palco, nao a rolagem. */
+  overflow: hidden;
   border-radius: 0;
   display: grid;
 }
@@ -1934,26 +1939,12 @@ button:disabled {
 }
 
 /* --- Menu da engrenagem (configurações da mesa) --- */
-.mesa-config-wrap {
-  position: relative;
-  display: flex;
-  justify-content: flex-end;
-  margin: 0.4rem 0;
-}
-.mesa-config-btn {
-  width: 2.1rem;
-  height: 2.1rem;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  font-size: 1.05rem;
-  line-height: 1;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.mesa-config-btn.ativa {
-  outline: 2px solid var(--accent, #8b5cf6);
-  outline-offset: 1px;
+/* Separador entre as ferramentas de inserir e a engrenagem, na mesma barra. */
+.mesa-tools-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.15rem 0.25rem;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 /* Fixo e centralizado, NAO ancorado no botao: na tela cheia a engrenagem fica
@@ -1998,22 +1989,55 @@ button:disabled {
   place-items: center;
   line-height: 1;
 }
-.mesa-config-bloco {
-  padding-top: 0.6rem;
-  margin-top: 0.6rem;
+/* Cada assunto e um grupo que abre ao clicar no titulo. */
+.mesa-config-grupo {
   border-top: 1px solid var(--borda, rgba(255, 255, 255, 0.12));
 }
-.mesa-config-bloco:first-of-type {
+.mesa-config-grupo:first-of-type {
   border-top: 0;
-  margin-top: 0;
-  padding-top: 0;
 }
-.mesa-config-bloco h4 {
-  margin: 0 0 0.45rem;
-  font-size: 0.78rem;
+.mesa-config-grupo h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 400;
+}
+.mesa-config-grupo-btn {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.6rem 0.2rem;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.mesa-config-grupo-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.mesa-config-seta {
+  width: 0.8rem;
+  flex: 0 0 auto;
+  opacity: 0.65;
+}
+.mesa-config-grupo-nome {
+  font-size: 0.82rem;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.65;
+}
+.mesa-config-grupo-resumo {
+  font-size: 0.78rem;
+  opacity: 0.55;
+  margin-left: auto;
+}
+.mesa-config-grupo.aberto .mesa-config-grupo-nome {
+  color: var(--accent, #a78bfa);
+}
+.mesa-config-corpo {
+  padding: 0 0.2rem 0.85rem;
 }
 .mesa-config-opcao {
   display: flex;
@@ -2104,12 +2128,12 @@ button:disabled {
   flex: 1 1 100%;
   min-width: 0;
 }
-.mesa-config-bloco > button {
+.mesa-config-corpo > button {
   margin-right: 0.5rem;
 }
 /* Dentro de um bloco (que e block, nao flex) a nota precisa ir para a propria
    linha por conta propria, senao envolve o botao ao lado. */
-.mesa-config-bloco > .mesa-audio-note {
+.mesa-config-corpo > .mesa-audio-note {
   display: block;
   margin-top: 0.45rem;
   line-height: 1.4;

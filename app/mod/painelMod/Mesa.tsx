@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
@@ -189,6 +189,8 @@ export function Mesa({
   const [embedInput, setEmbedInput] = useState("");
   // Menu da engrenagem: ajustes da mesa, link do OBS e a lista de atalhos.
   const [configAberto, setConfigAberto] = useState(false);
+  // Qual grupo do menu esta aberto (um por vez; null = todos fechados).
+  const [grupoAberto, setGrupoAberto] = useState<string | null>("mesa");
   // Aviso de "copiado" do link do OBS, que volta ao normal sozinho.
   const [copiado, setCopiado] = useState(false);
   // O menu vai para o body por portal, entao so pode ser montado no cliente.
@@ -1307,7 +1309,33 @@ export function Mesa({
   //
   // O Ctrl e o que separa "arrastar a tela" de "arrastar o item": sem ele, o
   // botao esquerdo continua movendo o elemento como sempre.
-  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  // Deslocamento da mesa, em pixels de tela.
+  //
+  // NAO usa scrollLeft/scrollTop: a rolagem so tem alcance quando o palco
+  // transborda o viewport, entao no zoom normal o arrasto simplesmente nao
+  // saia do lugar — so "rolava" quando ja estava bem perto da borda. Aqui o
+  // deslocamento e uma translacao livre, sem limite, nos dois eixos ao mesmo
+  // tempo (inclusive na diagonal).
+  //
+  // Fica num ref, e nao no estado, porque ele muda a cada evento de ponteiro:
+  // pelo estado seria um re-render da mesa inteira por quadro. O valor e
+  // escrito direto nas custom properties do palco.
+  const panAtual = useRef({ x: 0, y: 0 });
+
+  const aplicarPan = useCallback(() => {
+    const st = stageRef.current;
+    if (!st) return;
+    st.style.setProperty("--pan-x", `${panAtual.current.x}px`);
+    st.style.setProperty("--pan-y", `${panAtual.current.y}px`);
+  }, []);
+
+  function resetarVista() {
+    panAtual.current = { x: 0, y: 0 };
+    aplicarPan();
+    setZoom(1);
+  }
+
+  const panRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   // Ha um pan com Ctrl em andamento? Serve para segurar o menu de contexto no
   // macOS, onde Ctrl + clique equivale ao botao direito.
   const panComCtrl = useRef(false);
@@ -1325,15 +1353,22 @@ export function Mesa({
       e.stopPropagation();
       panComCtrl.current = true;
     }
-    panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    panRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      px: panAtual.current.x,
+      py: panAtual.current.y,
+    };
     el.classList.add("panning");
     el.setPointerCapture(e.pointerId);
 
     const mover = (ev: PointerEvent) => {
       const p = panRef.current;
-      if (!p || !el) return;
-      el.scrollLeft = p.left - (ev.clientX - p.x);
-      el.scrollTop = p.top - (ev.clientY - p.y);
+      if (!p) return;
+      // A mesa acompanha o ponteiro (pegar e arrastar), sem teto: para cima,
+      // para baixo, para os lados e na diagonal.
+      panAtual.current = { x: p.px + (ev.clientX - p.x), y: p.py + (ev.clientY - p.y) };
+      aplicarPan();
     };
     const soltar = () => {
       panRef.current = null;
@@ -1357,49 +1392,69 @@ export function Mesa({
     if (panComCtrl.current || e.ctrlKey || e.metaKey) e.preventDefault();
   }
 
-  // Zoom com a roda do mouse, centrado no ponteiro. Aumentamos o palco
-  // (via zoom) e ajustamos o scroll do viewport para o ponto sob o cursor
-  // continuar sob o cursor. Sem Ctrl, o scroll rola a pagina/viewport normal.
+  // Zoom com a roda do mouse, ancorado no ponteiro.
+  //
+  // O ponto do palco que esta sob o cursor precisa continuar sob o cursor
+  // depois do zoom. Em vez de calcular onde o palco vai parar (ele e
+  // centralizado por `margin:auto` na tela cheia e alinhado a esquerda no
+  // painel — contas diferentes), guardamos a fracao do palco sob o cursor e,
+  // ja com o novo tamanho aplicado, medimos onde ela foi parar e corrigimos o
+  // deslocamento pela diferenca. Serve para os dois modos sem saber do layout.
+  const ancoraZoom = useRef<{ u: number; v: number; cx: number; cy: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const a = ancoraZoom.current;
+    if (!a) return;
+    ancoraZoom.current = null;
+    const st = stageRef.current;
+    if (!st) return;
+    const r = st.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    // Onde a fracao ancorada esta agora, depois do novo zoom.
+    const foiParar = { x: r.left + a.u * r.width, y: r.top + a.v * r.height };
+    panAtual.current = {
+      x: panAtual.current.x + (a.cx - foiParar.x),
+      y: panAtual.current.y + (a.cy - foiParar.y),
+    };
+    aplicarPan();
+  }, [zoom, aplicarPan]);
+
+  // Muda o zoom mantendo fixo o ponto (cx, cy) da tela.
+  const zoomarEm = useCallback((novo: number, cx: number, cy: number) => {
+    const st = stageRef.current;
+    if (st) {
+      const r = st.getBoundingClientRect();
+      if (r.width && r.height) {
+        ancoraZoom.current = {
+          u: (cx - r.left) / r.width,
+          v: (cy - r.top) / r.height,
+          cx,
+          cy,
+        };
+      }
+    }
+    setZoom(novo);
+  }, []);
+
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
 
     function onWheel(e: WheelEvent) {
       // A roda SEMPRE da zoom sobre a mesa, nos dois modos. O viewport nao
-      // rola mais (overflow:hidden), entao nao ha rolagem para disputar com
-      // ela; para se deslocar, arraste com Ctrl (ou com o botao do meio).
+      // rola (overflow:hidden), entao nao ha rolagem para disputar com ela;
+      // para se deslocar, arraste com Ctrl (ou com o botao do meio).
       e.preventDefault(); // evita o zoom do navegador
-      const el = viewportRef.current;
-      if (!el) return;
-
       const oldZoom = zoomRef.current;
       const factor = Math.exp(-e.deltaY * 0.0015);
       const newZoom = clamp(oldZoom * factor, MIN_ZOOM, MAX_ZOOM);
       if (newZoom === oldZoom) return;
-
-      // Ponto sob o cursor (em px, relativo ao conteudo do palco) antes do zoom.
-      const rect = el.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const contentX = el.scrollLeft + mouseX;
-      const contentY = el.scrollTop + mouseY;
-
-      // O palco escala linearmente com o zoom; recalculamos o scroll para manter
-      // a mesma fracao do palco sob o cursor.
-      const ratio = newZoom / oldZoom;
-      const newScrollLeft = contentX * ratio - mouseX;
-      const newScrollTop = contentY * ratio - mouseY;
-
-      setZoom(newZoom);
-      requestAnimationFrame(() => {
-        el.scrollLeft = newScrollLeft;
-        el.scrollTop = newScrollTop;
-      });
+      zoomarEm(newZoom, e.clientX, e.clientY);
     }
 
     vp.addEventListener("wheel", onWheel, { passive: false });
     return () => vp.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [zoomarEm]);
 
   // --- Blocos de UI reaproveitados nos dois modos (secao do painel e tela
   // exclusiva em tela cheia). A logica de interacao e a mesma; muda so o
@@ -1432,6 +1487,21 @@ export function Mesa({
             <span className="mesa-tool-dica">{f.nome}</span>
           </button>
         ))}
+
+        {/* A engrenagem fica na MESMA barra dos demais icones. Ela nao abre um
+            painel aqui embaixo como os outros: abre o menu de configuracoes,
+            que e uma janela por cima da mesa. Por isso vem depois de um
+            separador — e uma ferramenta de ajuste, nao de inserir. */}
+        <span className="mesa-tools-sep" aria-hidden="true" />
+        <button
+          className={`mesa-tool${configAberto ? " ativa" : ""}`}
+          aria-label="Configurações"
+          aria-expanded={configAberto}
+          onClick={() => setConfigAberto((v) => !v)}
+        >
+          <span aria-hidden="true">⚙️</span>
+          <span className="mesa-tool-dica">Configurações</span>
+        </button>
       </div>
 
       {ferramenta === "midia" && (
@@ -1781,14 +1851,19 @@ export function Mesa({
           max={MAX_ZOOM}
           step={0.05}
           value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
+          onChange={(e) => {
+            // Pela barra nao ha ponteiro sobre a mesa: ancora no centro do
+            // viewport, senao a mesa escaparia da vista ao ampliar.
+            const r = viewportRef.current?.getBoundingClientRect();
+            const novo = Number(e.target.value);
+            if (r) zoomarEm(novo, r.left + r.width / 2, r.top + r.height / 2);
+            else setZoom(novo);
+          }}
         />
         <span className="mesa-scale-value">{zoom.toFixed(2)}×</span>
-        {zoom !== 1 && (
-          <button onClick={() => setZoom(1)} title="Voltar ao 1×">
-            Resetar
-          </button>
-        )}
+        <button onClick={resetarVista} title="Volta ao 1× e recentraliza a mesa">
+          Centralizar
+        </button>
         <span className="mesa-audio-note">
           Roda do mouse dá zoom (centrado no ponteiro). Para andar pela mesa,
           arraste segurando <strong>Ctrl</strong> (ou com o botão do meio).
@@ -1817,93 +1892,135 @@ export function Mesa({
 
   const obsUrl = streamerSlug ? `${PUBLIC_ORIGIN}/overlay/${streamerSlug}` : "";
 
-  const configControls = (
-    <div className="mesa-config-wrap">
-      <button
-        className={`mesa-config-btn${configAberto ? " ativa" : ""}`}
-        onClick={() => setConfigAberto((v) => !v)}
-        aria-expanded={configAberto}
-        aria-label="Configurações da mesa"
-        title="Configurações da mesa"
-      >
-        <span aria-hidden="true">⚙️</span>
-      </button>
+  const GRUPOS_CONFIG: ReadonlyArray<{
+    id: string;
+    nome: string;
+    resumo: string;
+    conteudo: React.ReactNode;
+  }> = [
+    {
+      id: "mesa",
+      nome: "Mesa",
+      resumo: "fundo, zoom e grade",
+      conteudo: (
+        <>
+          {bgControls}
+          {zoomControls}
+          <label className="mesa-config-opcao">
+            <input
+              type="checkbox"
+              checked={grade}
+              onChange={(e) => trocarGrade(e.target.checked)}
+            />
+            Grade de alinhamento
+            <span className="mesa-audio-note">Só aqui na mesa — não aparece na live.</span>
+          </label>
+        </>
+      ),
+    },
+    {
+      id: "obs",
+      nome: "OBS",
+      resumo: "link do overlay",
+      conteudo: obsUrl ? (
+        <>
+          <p className="mesa-config-link">{obsUrl}</p>
+          <button
+            onClick={() => {
+              navigator.clipboard
+                ?.writeText(obsUrl)
+                .then(() => setCopiado(true))
+                .catch(() => setCopiado(false));
+            }}
+          >
+            {copiado ? "Copiado!" : "Copiar link do OBS"}
+          </button>
+          <span className="mesa-audio-note">
+            Fonte de Navegador no OBS, 1920×1080, com fundo transparente.
+          </span>
+        </>
+      ) : (
+        <p className="mesa-audio-note" style={{ margin: 0 }}>
+          Escolha um streamer para ver o link.
+        </p>
+      ),
+    },
+    {
+      id: "atalhos",
+      nome: "Atalhos",
+      resumo: `${ATALHOS.length} teclas`,
+      conteudo: (
+        <dl className="mesa-atalhos">
+          {ATALHOS.map((a) => (
+            <div key={a.tecla} className="mesa-atalho">
+              <dt>{a.tecla}</dt>
+              <dd>{a.oque}</dd>
+            </div>
+          ))}
+        </dl>
+      ),
+    },
+  ];
 
-      {/* Vai para o <body> por portal. Na tela cheia a engrenagem fica dentro
-          de .canvas-panel, que tem backdrop-filter — e isso faz o painel virar
-          o bloco que contem ate os filhos `position: fixed`. Sem o portal, o
-          menu ficava preso e cortado ali dentro, e o item da mesa por baixo e
-          que recebia os cliques. */}
+  const configControls = (
+    <>
+      {/* Vai para o <body> por portal. Na tela cheia a barra de icones fica
+          dentro de .canvas-toolbar, que tem backdrop-filter — e isso faz ela
+          virar o bloco que contem ate os filhos `position: fixed`. Sem o
+          portal, o menu ficava preso e cortado ali dentro, e o item da mesa
+          por baixo e que recebia os cliques. */}
       {configAberto && montado && createPortal(
         <>
           {/* Fundo clicavel: fecha o menu e impede que a mesa receba clique
               enquanto ele esta aberto. */}
           <div className="mesa-config-fundo" onClick={() => setConfigAberto(false)} />
-        <div className="mesa-config" role="dialog" aria-modal="true" aria-label="Configurações da mesa">
-          <div className="mesa-config-topo">
-            <strong>Configurações</strong>
-            <button
-              className="mesa-config-fechar"
-              onClick={() => setConfigAberto(false)}
-              aria-label="Fechar"
-            >
-              ✕
-            </button>
-          </div>
-
-          <section className="mesa-config-bloco">
-            <h4>Visualização</h4>
-            {bgControls}
-            {zoomControls}
-            <label className="mesa-config-opcao">
-              <input
-                type="checkbox"
-                checked={grade}
-                onChange={(e) => trocarGrade(e.target.checked)}
-              />
-              Grade de alinhamento
-              <span className="mesa-audio-note">
-                Só aqui na mesa — não aparece na live.
-              </span>
-            </label>
-          </section>
-
-          {obsUrl && (
-            <section className="mesa-config-bloco">
-              <h4>Link do OBS</h4>
-              <p className="mesa-config-link">{obsUrl}</p>
+          <div
+            className="mesa-config"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Configurações da mesa"
+          >
+            <div className="mesa-config-topo">
+              <strong>Configurações</strong>
               <button
-                onClick={() => {
-                  navigator.clipboard
-                    ?.writeText(obsUrl)
-                    .then(() => setCopiado(true))
-                    .catch(() => setCopiado(false));
-                }}
+                className="mesa-config-fechar"
+                onClick={() => setConfigAberto(false)}
+                aria-label="Fechar"
               >
-                {copiado ? "Copiado!" : "Copiar link do OBS"}
+                ✕
               </button>
-              <span className="mesa-audio-note">
-                Fonte de Navegador no OBS, 1920×1080, com fundo transparente.
-              </span>
-            </section>
-          )}
+            </div>
 
-          <section className="mesa-config-bloco">
-            <h4>Atalhos</h4>
-            <dl className="mesa-atalhos">
-              {ATALHOS.map((a) => (
-                <div key={a.tecla} className="mesa-atalho">
-                  <dt>{a.tecla}</dt>
-                  <dd>{a.oque}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        </div>
+            {/* Um grupo por assunto: o titulo e o botao, e o conteudo so
+                aparece no grupo aberto. Sao poucos por enquanto, mas assim
+                cada ajuste novo entra no grupo dele em vez de alongar uma
+                lista unica. */}
+            {GRUPOS_CONFIG.map((g) => {
+              const aberto = grupoAberto === g.id;
+              return (
+                <section key={g.id} className={`mesa-config-grupo${aberto ? " aberto" : ""}`}>
+                  <h4>
+                    <button
+                      className="mesa-config-grupo-btn"
+                      aria-expanded={aberto}
+                      onClick={() => setGrupoAberto(aberto ? null : g.id)}
+                    >
+                      <span className="mesa-config-seta" aria-hidden="true">
+                        {aberto ? "▾" : "▸"}
+                      </span>
+                      <span className="mesa-config-grupo-nome">{g.nome}</span>
+                      <span className="mesa-config-grupo-resumo">{g.resumo}</span>
+                    </button>
+                  </h4>
+                  {aberto && <div className="mesa-config-corpo">{g.conteudo}</div>}
+                </section>
+              );
+            })}
+          </div>
         </>,
         document.body
       )}
-    </div>
+    </>
   );
 
   const stage = (
@@ -2201,13 +2318,17 @@ export function Mesa({
           {sceneControls}
         </aside>
 
-        <aside className="canvas-panel canvas-panel-right">
-          <h3 className="canvas-panel-title">ajustes</h3>
-          {audioControls}
-          {configControls}
-        </aside>
+        {/* So aparece quando ha um item com som selecionado; a engrenagem
+            mudou para a barra de icones, junto das demais ferramentas. */}
+        {audioControls && (
+          <aside className="canvas-panel canvas-panel-right">
+            <h3 className="canvas-panel-title">ajustes</h3>
+            {audioControls}
+          </aside>
+        )}
 
         <div className="canvas-toolbar">{addControls}</div>
+        {configControls}
       </div>
     );
   }
@@ -2224,9 +2345,9 @@ export function Mesa({
         para mostrar no overlay, e ✕ para remover. O OBS acompanha em tempo real.
       </p>
       {addControls}
+      {configControls}
       {sceneControls}
       {audioControls}
-      {configControls}
       {stage}
     </section>
   );
