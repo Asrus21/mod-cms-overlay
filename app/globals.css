@@ -491,7 +491,8 @@ a {
 /* Viewport com scroll: quando o zoom aumenta o palco, sobra para rolar. */
 .mesa-viewport {
   /* hidden, nao auto: a roda do mouse da zoom, entao rolagem nao faz sentido
-     aqui. O pan (botao do meio) continua funcionando porque scrollLeft/Top
+     aqui. O pan (Ctrl + arrastar, ou botao do meio) continua funcionando
+     porque scrollLeft/Top
      seguem programaveis mesmo com overflow:hidden. */
   overflow: hidden;
   max-height: 75vh;
@@ -499,7 +500,8 @@ a {
   /* Margem CONSTANTE. Ja foi condicional (crescia quando havia item fora da
      tela) e isso dava um solavanco de zoom toda vez que um item entrava ou
      saia. Para alcancar o que esta estacionado longe, use zoom out (roda do
-     mouse) e pan (botao do meio) — sem a mesa mudar de tamanho sozinha. */
+     mouse) e pan (Ctrl + arrastar, ou botao do meio) — sem a mesa mudar de
+     tamanho sozinha. */
   padding: 8%;
 }
 
@@ -1733,7 +1735,8 @@ button:disabled {
    mesa exatamente como foi criado, dentro ou fora. Quem indica o que vai ao ar
    e o proprio retangulo do palco. */
 
-/* Pan em andamento (botao do meio): cursor de agarrar e sem selecao de texto. */
+/* Pan em andamento (Ctrl + arrastar, ou botao do meio): cursor de agarrar e
+   sem selecao de texto. */
 .mesa-viewport.panning {
   cursor: grabbing;
   user-select: none;
