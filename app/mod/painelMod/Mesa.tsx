@@ -260,6 +260,18 @@ export function Mesa({
   // Motivo de as cenas estarem indisponiveis (ex.: tabela nao criada no banco).
   // Sem isto a lista apareceria vazia, como se so nao houvesse cena salva.
   const [sceneErro, setSceneErro] = useState("");
+  // Cena "aberta" no momento: a que foi aplicada (ou acabou de ser criada).
+  //
+  // Enquanto ela esta aberta, a mesa E a cena: apagar, acrescentar ou mover um
+  // item muda o que esta gravado, como acontece numa cena do OBS. Antes a cena
+  // era so um retrato do momento em que foi salva, entao quem apagava um item
+  // e clicava na cena de novo via o item voltar.
+  const [cenaAtiva, setCenaAtiva] = useState<{ id: string; nome: string } | null>(null);
+  const [cenaSalvando, setCenaSalvando] = useState(false);
+  // Ultimo arranjo que sabemos estar gravado, em JSON. Serve para nao regravar
+  // a cena a toa — inclusive logo depois de aplica-la, quando a mesa muda mas
+  // passa a ser exatamente o que ja esta no banco.
+  const ultimoSalvo = useRef<string>("");
 
   // Alt segurado: muda o cursor sobre os itens, senao ninguem descobre que da
   // para remodelar sem acertar as alcinhas.
@@ -958,6 +970,9 @@ export function Mesa({
   }, []);
 
   useEffect(() => {
+    // As cenas sao por streamer: a que estava aberta nao vale para o novo.
+    setCenaAtiva(null);
+    ultimoSalvo.current = "";
     loadScenes(streamerSlug);
   }, [streamerSlug, loadScenes]);
 
@@ -969,23 +984,7 @@ export function Mesa({
 
     setSceneBusy(true);
     try {
-      // Snapshot do que esta na mesa agora.
-      const snapshot = itemsRef.current.map((it) => ({
-        mediaId: it.media.type === "TEXT" || it.media.type === "WIDGET" || it.media.type === "EMBED"
-          ? null
-          : it.media.id,
-        url: it.media.url,
-        name: it.media.name,
-        type: it.media.type,
-        text: it.text,
-        x: it.x,
-        y: it.y,
-        scaleX: it.scaleX,
-        scaleY: it.scaleY,
-        volume: it.volume,
-        muted: it.muted,
-        hidden: it.hidden,
-      }));
+      const snapshot = snapshotDe(itemsRef.current);
       const res = await fetch("/api/scenes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -995,13 +994,44 @@ export function Mesa({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Falha ao salvar a cena");
       }
+      const criada = (await res.json().catch(() => ({}))) as { id?: string; name?: string };
       setSceneName("");
+      // A cena recem-criada passa a ser a aberta: ela nasceu do que esta na
+      // mesa agora, entao seguir editando a mesa e seguir editando ela.
+      if (criada.id) {
+        ultimoSalvo.current = JSON.stringify(snapshot);
+        setCenaAtiva({ id: criada.id, nome: criada.name || name });
+      }
       await loadScenes(streamerSlug);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao salvar a cena");
     } finally {
       setSceneBusy(false);
     }
+  }
+
+  // Arranjo da mesa no formato que a cena guarda. Fora de saveScene porque a
+  // gravacao automatica da cena aberta usa exatamente o mesmo formato — se os
+  // dois divergissem, a comparacao com `ultimoSalvo` acusaria mudanca a cada
+  // quadro e a cena seria regravada sem parar.
+  function snapshotDe(lista: PlacedItem[]): SceneSnapshotItem[] {
+    return lista.map((it) => ({
+      mediaId:
+        it.media.type === "TEXT" || it.media.type === "WIDGET" || it.media.type === "EMBED"
+          ? null
+          : it.media.id,
+      url: it.media.url,
+      name: it.media.name,
+      type: it.media.type,
+      text: it.text,
+      x: it.x,
+      y: it.y,
+      scaleX: it.scaleX,
+      scaleY: it.scaleY,
+      volume: it.volume,
+      muted: it.muted,
+      hidden: it.hidden,
+    }));
   }
 
   async function applyScene(id: string, nome: string) {
@@ -1068,6 +1098,10 @@ export function Mesa({
         if (r.ok) novos.push(placed);
       }
       setItems(novos);
+      // A partir daqui a mesa E esta cena. Guardamos o arranjo aplicado para a
+      // gravacao automatica so disparar quando algo de fato mudar.
+      ultimoSalvo.current = JSON.stringify(snapshotDe(novos));
+      setCenaAtiva({ id, nome });
       if (novos.length < snapshot.length) {
         alert(
           `Cena aplicada, mas ${snapshot.length - novos.length} item(ns) não puderam ser recriados (a mídia pode ter sido excluída da biblioteca).`
@@ -1089,11 +1123,59 @@ export function Mesa({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
+      // Apagou a que estava aberta: nao ha mais onde gravar as mudancas.
+      if (cenaAtiva?.id === id) setCenaAtiva(null);
       await loadScenes(streamerSlug);
     } catch {
       // silencioso
     }
   }
+
+  // Grava a cena aberta sempre que a mesa muda.
+  //
+  // Com espera: arrastar um item dispara uma mudanca a cada quadro, e sem isso
+  // seria uma gravacao por quadro. Esperamos o arranjo assentar e gravamos uma
+  // vez so.
+  useEffect(() => {
+    if (!cenaAtiva || !streamerSlug || sceneBusy) return;
+    const snapshot = snapshotDe(items);
+    const agora = JSON.stringify(snapshot);
+    // Nada mudou de verdade (ex.: logo apos aplicar a cena).
+    if (agora === ultimoSalvo.current) return;
+
+    const t = setTimeout(async () => {
+      setCenaSalvando(true);
+      try {
+        const res = await fetch("/api/scenes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            streamer: streamerSlug,
+            name: cenaAtiva.nome,
+            items: snapshot,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Falha ao gravar a cena");
+        }
+        ultimoSalvo.current = agora;
+        setSceneErro("");
+        // Mantem a contagem de itens da lista em dia.
+        setScenes((antes) =>
+          antes.map((c) => (c.id === cenaAtiva.id ? { ...c, count: snapshot.length } : c))
+        );
+      } catch (err) {
+        // Aviso na propria secao, e nao um alerta: isto roda sozinho e um
+        // alerta por tentativa seria insuportavel.
+        setSceneErro(err instanceof Error ? err.message : "Falha ao gravar a cena");
+      } finally {
+        setCenaSalvando(false);
+      }
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, cenaAtiva, streamerSlug, sceneBusy]);
 
   async function handleRemoveItem(itemId: string) {
     // Otimista: some da mesa na hora.
@@ -2084,16 +2166,36 @@ export function Mesa({
         <button
           onClick={saveScene}
           disabled={sceneBusy || !sceneName.trim() || !streamerSlug}
-          title="Salva o arranjo que está na mesa agora"
+          title="Cria uma cena nova com o arranjo que está na mesa agora"
         >
-          {sceneBusy ? "…" : "💾 Salvar cena"}
+          {sceneBusy ? "…" : "💾 Salvar como nova"}
         </button>
       </div>
       {sceneErro && <p className="scene-erro">⚠️ {sceneErro}</p>}
+
+      {/* Qual cena esta aberta. Sem isto a gravacao automatica seria invisivel:
+          o mod mexeria na mesa sem saber que esta mexendo numa cena gravada. */}
+      {cenaAtiva && (
+        <div className="cena-aberta">
+          <span className="cena-aberta-rotulo">
+            editando <strong>{cenaAtiva.nome}</strong>
+          </span>
+          <span className="cena-aberta-estado">
+            {cenaSalvando ? "gravando…" : "as mudanças ficam gravadas"}
+          </span>
+          <button
+            onClick={() => setCenaAtiva(null)}
+            title="Para de gravar as mudanças nesta cena. O que está na mesa continua como está."
+          >
+            Sair da cena
+          </button>
+        </div>
+      )}
+
       {scenes.length > 0 && (
         <ul className="scene-list">
           {scenes.map((s) => (
-            <li key={s.id} className="scene-item">
+            <li key={s.id} className={`scene-item${cenaAtiva?.id === s.id ? " aberta" : ""}`}>
               <button
                 className="scene-apply"
                 onClick={() => applyScene(s.id, s.name)}

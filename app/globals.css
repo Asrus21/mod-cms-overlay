@@ -2257,3 +2257,27 @@ button:disabled {
 .mesa-emote-origem[data-origem="7tv"] { background: rgba(41, 179, 155, 0.28); }
 .mesa-emote-origem[data-origem="bttv"] { background: rgba(217, 60, 60, 0.28); }
 .mesa-emote-origem[data-origem="ffz"] { background: rgba(120, 130, 150, 0.32); }
+
+/* Cena aberta: a mesa esta editando esta cena, e o que muda fica gravado. */
+.cena-aberta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.12);
+  font-size: 0.82rem;
+}
+.cena-aberta-rotulo { flex: 0 1 auto; }
+.cena-aberta-estado {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-left: auto;
+}
+.scene-item.aberta {
+  outline: 1px solid rgba(139, 92, 246, 0.55);
+  border-radius: 8px;
+}
