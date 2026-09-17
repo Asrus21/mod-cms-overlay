@@ -11,6 +11,7 @@ import {
   QUALIDADES,
   QUALIDADE_PADRAO,
   canalDaEntrada,
+  isQualidade,
   urlDoPlayer,
   type QualidadeId,
 } from "@/lib/twitch-player";
@@ -199,6 +200,10 @@ export function Mesa({
   // Grade de alinhamento sobre o palco. Só visual (não vai para o overlay);
   // fica guardada no navegador para não voltar desligada a cada visita.
   const [grade, setGrade] = useState(false);
+  // Qualidade da live usada como FUNDO da mesa. Mais baixa por padrão: o fundo
+  // fica tocando o tempo todo e serve só de guia, então não vale gastar banda
+  // (nem quadros) com 1080p60 nele.
+  const [bgQualidade, setBgQualidade] = useState<QualidadeId>("480p30");
   // Transmissão da Twitch: canal, qualidade e se entra com áudio.
   const [twitchCanal, setTwitchCanal] = useState("");
   const [twitchQ, setTwitchQ] = useState<QualidadeId>(QUALIDADE_PADRAO);
@@ -333,12 +338,24 @@ export function Mesa({
   const liveConfigured = Boolean(vdoRoom);
   const cfg = { room: vdoRoom, password: vdoPassword };
 
-  const twitchParent = typeof window !== "undefined" ? window.location.hostname : "";
-  const twitchSrc = twitchCh
-    ? `https://player.twitch.tv/?channel=${encodeURIComponent(
-        twitchCh
-      )}&parent=${twitchParent}&muted=true&autoplay=true&controls=false`
-    : "";
+  // Fundo da mesa com a live do streamer.
+  //
+  // Vai pela NOSSA pagina do player (/mod/player/twitch) em vez de um iframe
+  // direto do player.twitch.tv: e ela que consegue impor a qualidade — a
+  // Twitch nao aceita isso pela URL (ver lib/twitch-player.ts). Aqui isso
+  // importa mais que no item da mesa, porque o fundo fica tocando o tempo
+  // todo enquanto se monta a cena: em 1080p60 e banda gasta a toa, e num
+  // computador mais fraco tira quadros da propria mesa.
+  //
+  // Sempre mudo: e um guia para posicionar, e o som entraria em cima do
+  // audio que o mod ja esta ouvindo da live.
+  //
+  // Sai da origem ABERTA no momento, e nao do dominio canonico como o item da
+  // mesa: o fundo nao e gravado em lugar nenhum, entao nao ha link antigo para
+  // honrar — e assim ele funciona igual em preview e no desenvolvimento, em
+  // vez de puxar a pagina de producao de dentro deles.
+  const origemAtual = typeof window !== "undefined" ? window.location.origin : "";
+  const twitchSrc = twitchCh && origemAtual ? urlDoPlayer(origemAtual, twitchCh, bgQualidade) : "";
 
   const selected = items.find((i) => i.itemId === selectedId) ?? null;
 
@@ -1285,13 +1302,25 @@ export function Mesa({
   // efeito com [grade]: um efeito desses tambem dispara na montagem, com o
   // valor padrao, e apagaria a preferencia guardada antes de le-la.
   const GRADE_KEY = "bastidores:grade";
+  const BG_Q_KEY = "bastidores:fundo-qualidade";
   useEffect(() => {
     try {
       if (localStorage.getItem(GRADE_KEY) === "1") setGrade(true);
+      const q = localStorage.getItem(BG_Q_KEY);
+      if (isQualidade(q)) setBgQualidade(q);
     } catch {
-      /* navegador sem storage (anonimo, OBS): segue desligada */
+      /* navegador sem storage (anonimo, OBS): segue no padrao */
     }
   }, []);
+
+  function trocarBgQualidade(q: QualidadeId) {
+    setBgQualidade(q);
+    try {
+      localStorage.setItem(BG_Q_KEY, q);
+    } catch {
+      /* idem: a preferencia so nao sobrevive ao recarregar */
+    }
+  }
 
   function trocarGrade(ligada: boolean) {
     setGrade(ligada);
@@ -1774,6 +1803,21 @@ export function Mesa({
             {bgUrl && <button onClick={clearBackground}>Remover</button>}
           </>
         )}
+        {bgMode === "twitch" && streamerSlug && (
+          <label className="mesa-bg-label">
+            Qualidade da live no fundo
+            <select
+              value={bgQualidade}
+              onChange={(e) => trocarBgQualidade(e.target.value as QualidadeId)}
+            >
+              {QUALIDADES.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {bgMode === "obs" && liveConfigured && (
@@ -1805,6 +1849,8 @@ export function Mesa({
               <strong>{streamerName || streamerSlug}</strong> como fundo (o
               streamer selecionado). Você não precisa abrir nada. Tem alguns
               segundos de atraso (normal da Twitch). Só aparece com a live no ar.
+              A qualidade vale só para este fundo — quanto mais baixa, menos
+              banda e menos peso enquanto você monta a cena.
             </>
           ) : (
             <>Escolha um <strong>streamer</strong> na seção acima para usar a live dele como fundo.</>
@@ -2052,7 +2098,7 @@ export function Mesa({
         {bgMode === "obs" && liveConfigured && (
           <StageBg src={buildObsViewUrl(cfg)} title="Tela do OBS ao vivo" />
         )}
-        {bgMode === "twitch" && twitchCh && twitchParent && (
+        {bgMode === "twitch" && twitchSrc && (
           <StageBg src={twitchSrc} title="Transmissão da Twitch" />
         )}
 
