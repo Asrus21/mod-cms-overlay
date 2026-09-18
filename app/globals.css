@@ -2281,3 +2281,64 @@ button:disabled {
   outline: 1px solid rgba(139, 92, 246, 0.55);
   border-radius: 8px;
 }
+
+/* Editor do texto direto na mesa (lápis na barra do item).
+   Tamanhos em px, e não herdados: o texto do item escala com a largura do
+   palco (cqw), então herdar deixaria o editor gigante num texto grande e
+   ilegível num pequeno. */
+.mesa-texto-editor {
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: max-content;
+  min-width: 220px;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px;
+  border-radius: 8px;
+  border: 1px solid #2a2f3a;
+  background: rgba(11, 13, 18, 0.96);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  /* O texto do item não é selecionável enquanto se arrasta; aqui é. */
+  user-select: text;
+  cursor: auto;
+}
+.mesa-texto-editor textarea {
+  width: 100%;
+  min-height: 46px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  font-family: inherit;
+  color: #e6e8ee;
+  background: #0b0d12;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  padding: 5px 6px;
+}
+.mesa-texto-editor-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.mesa-texto-editor-acoes button {
+  font-size: 12px;
+  padding: 3px 9px;
+  height: auto;
+  width: auto;
+}
+/* Numa linha propria, sob os botoes: junto deles a dica quebrava em duas
+   linhas e espremia o "Cancelar"/"Salvar". */
+.mesa-texto-dica {
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: right;
+  opacity: 0.55;
+  color: #e6e8ee;
+  white-space: nowrap;
+}
