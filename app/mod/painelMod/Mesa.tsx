@@ -260,6 +260,10 @@ export function Mesa({
   // Motivo de as cenas estarem indisponiveis (ex.: tabela nao criada no banco).
   // Sem isto a lista apareceria vazia, como se so nao houvesse cena salva.
   const [sceneErro, setSceneErro] = useState("");
+  // Texto sendo editado direto na mesa (lapis na barra do item).
+  const [editandoTexto, setEditandoTexto] = useState<{ itemId: string; valor: string } | null>(null);
+  const [salvandoTexto, setSalvandoTexto] = useState(false);
+
   // Cena "aberta" no momento: a que foi aplicada (ou acabou de ser criada).
   //
   // Enquanto ela esta aberta, a mesa E a cena: apagar, acrescentar ou mover um
@@ -914,6 +918,48 @@ export function Mesa({
       x, y, scale: src.scaleX, scaleY: src.scaleY,
       volume: src.volume, muted: src.muted, hidden: src.hidden,
     };
+  }
+
+  // Troca o texto de um item que ja esta na mesa.
+  //
+  // E o mesmo disparo de sempre com o MESMO itemId: a rota de show faz upsert
+  // por itemId, entao o overlay recebe a troca ao vivo e o item continua sendo
+  // o mesmo — nao perde posicao, tamanho nem o lugar na cena aberta.
+  async function salvarTexto(item: PlacedItem) {
+    const novo = (editandoTexto?.valor ?? "").trim();
+    if (!novo) {
+      alert("O texto não pode ficar vazio.");
+      return;
+    }
+    if (novo === (item.text ?? "")) {
+      setEditandoTexto(null);
+      return;
+    }
+    setSalvandoTexto(true);
+    const atualizado: PlacedItem = {
+      ...item,
+      text: novo,
+      // O nome acompanha o texto: e ele que a cena salva guarda.
+      media: { ...item.media, name: novo.slice(0, 40) },
+    };
+    try {
+      const res = await fetch("/api/trigger/show", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(showPayloadFor(item.itemId, atualizado, item.x, item.y)),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao trocar o texto");
+      }
+      setItems((prev) => prev.map((p) => (p.itemId === item.itemId ? atualizado : p)));
+      setEditandoTexto(null);
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao trocar o texto");
+    } finally {
+      setSalvandoTexto(false);
+    }
   }
 
   // Cola (Ctrl+V) uma copia do item guardado no clipboard da mesa, exatamente
@@ -2547,34 +2593,94 @@ export function Mesa({
 
         {items.map((it) => {
           const isSel = it.itemId === selectedId;
+          const editandoEste = editandoTexto?.itemId === it.itemId;
           const toolbar = (
-            <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
-              <button
-                className="mesa-grip"
-                title="Arraste para mover"
-                aria-label="Mover"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onItemPointerDown(e, it);
-                }}
-              >
-                ✥
-              </button>
-              <button
-                onClick={() => toggleHidden(it)}
-                title={it.hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
-                aria-label={it.hidden ? "Mostrar" : "Ocultar"}
-              >
-                {it.hidden ? "🙈" : "👁"}
-              </button>
-              <button
-                onClick={() => handleRemoveItem(it.itemId)}
-                title="Remover da mesa"
-                aria-label="Remover"
-              >
-                ✕
-              </button>
-            </div>
+            <>
+              <div className="mesa-item-toolbar" onPointerDown={(e) => e.stopPropagation()}>
+                <button
+                  className="mesa-grip"
+                  title="Arraste para mover"
+                  aria-label="Mover"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    onItemPointerDown(e, it);
+                  }}
+                >
+                  ✥
+                </button>
+                {/* So no texto: e o unico item cujo conteudo da para trocar sem
+                    remover e colocar de novo. */}
+                {it.media.type === "TEXT" && (
+                  <button
+                    onClick={() =>
+                      setEditandoTexto(
+                        editandoEste ? null : { itemId: it.itemId, valor: it.text ?? "" }
+                      )
+                    }
+                    title="Editar o texto"
+                    aria-label="Editar o texto"
+                  >
+                    ✏️
+                  </button>
+                )}
+                <button
+                  onClick={() => toggleHidden(it)}
+                  title={it.hidden ? "Mostrar no overlay" : "Ocultar do overlay"}
+                  aria-label={it.hidden ? "Mostrar" : "Ocultar"}
+                >
+                  {it.hidden ? "🙈" : "👁"}
+                </button>
+                <button
+                  onClick={() => handleRemoveItem(it.itemId)}
+                  title="Remover da mesa"
+                  aria-label="Remover"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {editandoEste && (
+                <div
+                  className="mesa-texto-editor"
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <textarea
+                    autoFocus
+                    rows={2}
+                    value={editandoTexto?.valor ?? ""}
+                    onChange={(e) =>
+                      setEditandoTexto({ itemId: it.itemId, valor: e.target.value })
+                    }
+                    onKeyDown={(e) => {
+                      // Os atalhos da mesa (numeros, Espaco, Esc) ja se calam
+                      // dentro de campos de texto; aqui Esc e Enter tem sentido
+                      // proprio.
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setEditandoTexto(null);
+                      }
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        salvarTexto(it);
+                      }
+                    }}
+                  />
+                  <div className="mesa-texto-editor-acoes">
+                    <button onClick={() => setEditandoTexto(null)}>Cancelar</button>
+                    <button
+                      className="primary"
+                      onClick={() => salvarTexto(it)}
+                      disabled={salvandoTexto}
+                    >
+                      {salvandoTexto ? "…" : "Salvar"}
+                    </button>
+                  </div>
+                  <span className="mesa-texto-dica">
+                    Enter salva · Shift+Enter quebra linha · Esc cancela
+                  </span>
+                </div>
+              )}
+            </>
           );
 
           if (it.media.type === "AUDIO") {
