@@ -2342,3 +2342,37 @@ button:disabled {
   color: #e6e8ee;
   white-space: nowrap;
 }
+
+/* Histórico de logins dentro do menu da engrenagem (só o master vê). */
+.mesa-logins {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.mesa-logins li {
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Busca livre do master na barra do canvas. */
+.canvas-busca input {
+  width: 11rem;
+  font-size: 0.85rem;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

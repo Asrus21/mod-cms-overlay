@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       master: isMaster(login),
     });
 
-    const res = NextResponse.redirect(new URL("/mod/painelMod", origin));
+    const res = NextResponse.redirect(new URL("/mod/painelMod/canvas", origin));
     res.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

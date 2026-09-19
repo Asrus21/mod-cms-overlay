@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { buildObsPushUrl, buildObsViewUrl } from "@/lib/vdo";
+import { buildObsPushUrl, buildObsViewUrl, buildPushUrl, streamIdFromName } from "@/lib/vdo";
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos } from "@/lib/stage";
@@ -145,6 +145,8 @@ export function Mesa({
   vdoRoom,
   vdoPassword,
   twitchChannel,
+  modName = "",
+  master = false,
   fullscreen = false,
 }: {
   media: Media[];
@@ -155,6 +157,10 @@ export function Mesa({
   vdoRoom: string;
   vdoPassword: string;
   twitchChannel: string;
+  // Nome de exibicao: e dele que sai o streamId do ao vivo.
+  modName?: string;
+  // Historico de logins e so do master.
+  master?: boolean;
   // true = tela exclusiva (palco em tela cheia + paineis flutuantes).
   fullscreen?: boolean;
 }) {
@@ -919,6 +925,92 @@ export function Mesa({
       volume: src.volume, muted: src.muted, hidden: src.hidden,
     };
   }
+
+  // --- O que so existia na pagina do painel, que virou este canvas ---
+
+  // Transmitir camera/tela para o OBS do streamer (VDO.Ninja).
+  async function transmitir(kind: "camera" | "screen") {
+    const url = buildPushUrl(cfg, streamIdFromName(modName || modSlug), {
+      screenshare: kind === "screen",
+    });
+    // Abre ANTES do await: depois dele o navegador trata como popup e bloqueia.
+    window.open(url, "_blank", "noopener");
+    try {
+      await fetch("/api/live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      });
+    } catch {
+      // auditoria e best-effort; nao impede a transmissao.
+    }
+  }
+
+  // Tira do overlay TODOS os itens deste mod de uma vez.
+  const [limpando, setLimpando] = useState(false);
+  async function limparOverlay() {
+    if (!streamerSlug) {
+      alert("Escolha um streamer primeiro.");
+      return;
+    }
+    if (!confirm("Tirar do overlay tudo o que você colocou neste streamer?")) return;
+    setLimpando(true);
+    try {
+      const res = await fetch("/api/trigger/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamer: streamerSlug }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao limpar o overlay");
+      }
+      setItems([]);
+      setSelectedId("");
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao limpar");
+    } finally {
+      setLimpando(false);
+    }
+  }
+
+  // Apaga uma midia da biblioteca (nao mexe no que ja esta na mesa).
+  const [apagandoMidia, setApagandoMidia] = useState("");
+  async function apagarMidia(m: Media) {
+    if (!confirm(`Excluir "${m.name}" da sua biblioteca? Isso não tira o que já está na mesa.`))
+      return;
+    setApagandoMidia(m.id);
+    try {
+      const res = await fetch(`/api/media/${encodeURIComponent(m.id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao excluir");
+      }
+      if (pickId === m.id) setPickId("");
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir");
+    } finally {
+      setApagandoMidia("");
+    }
+  }
+
+  // Historico de logins (so o master ve).
+  type LinhaLogin = { login: string; display: string; firstLoginAt: string; approx: boolean };
+  const [logins, setLogins] = useState<LinhaLogin[] | null>(null);
+  const [loginsErro, setLoginsErro] = useState("");
+  useEffect(() => {
+    if (!master || grupoAberto !== "logins" || logins) return;
+    fetch("/api/me/logins")
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || "Falha ao ler o histórico");
+        return d as { logins?: LinhaLogin[] };
+      })
+      .then((d) => setLogins(d.logins || []))
+      .catch((e: unknown) => setLoginsErro(e instanceof Error ? e.message : "Falha"));
+  }, [master, grupoAberto, logins]);
 
   // Troca o texto de um item que ja esta na mesa.
   //
@@ -1906,6 +1998,21 @@ export function Mesa({
                 <button className="primary" onClick={handlePlace} disabled={!pickId || placing}>
                   {placing ? "Colocando…" : "Colocar na mesa"}
                 </button>
+                {/* Apagar da biblioteca: so existia na pagina do painel. */}
+                {pickId && (
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      const m = media.find((x) => x.id === pickId);
+                      if (m) apagarMidia(m);
+                    }}
+                    disabled={apagandoMidia === pickId}
+                    title="Excluir da biblioteca"
+                    aria-label="Excluir da biblioteca"
+                  >
+                    {apagandoMidia === pickId ? "…" : "🗑"}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -2480,6 +2587,79 @@ export function Mesa({
         </p>
       ),
     },
+    {
+      id: "aovivo",
+      nome: "Ao vivo",
+      resumo: liveConfigured ? "sua câmera ou tela no OBS" : "desativado",
+      conteudo: liveConfigured ? (
+        <>
+          <div className="mesa-tool-linha">
+            <button className="primary" onClick={() => transmitir("camera")}>
+              📹 Transmitir câmera
+            </button>
+            <button className="primary" onClick={() => transmitir("screen")}>
+              🖥️ Transmitir tela
+            </button>
+          </div>
+          <span className="mesa-audio-note">
+            Abre numa aba nova — mantenha ela aberta enquanto transmite. Aparece no OBS
+            do streamer pela fonte do VDO.Ninja.
+          </span>
+        </>
+      ) : (
+        <p className="mesa-audio-note" style={{ margin: 0 }}>
+          Desativado. Defina <code>VDO_ROOM</code> (e, se quiser,{" "}
+          <code>VDO_PASSWORD</code>) no projeto para habilitar.
+        </p>
+      ),
+    },
+    {
+      id: "limpar",
+      nome: "Limpar",
+      resumo: "tirar tudo do overlay",
+      conteudo: (
+        <>
+          <button className="danger" onClick={limparOverlay} disabled={limpando || !streamerSlug}>
+            {limpando ? "Limpando…" : "Limpar overlay agora"}
+          </button>
+          <span className="mesa-audio-note">
+            Tira do overlay tudo o que <strong>você</strong> colocou neste streamer. Não
+            mexe no que os outros mods colocaram nem na sua biblioteca.
+          </span>
+        </>
+      ),
+    },
+    ...(master
+      ? [
+          {
+            id: "logins",
+            nome: "Logins",
+            resumo: "quem já entrou",
+            conteudo: (
+              <>
+                {loginsErro && <p className="scene-erro">⚠️ {loginsErro}</p>}
+                {!logins && !loginsErro && (
+                  <p className="mesa-audio-note" style={{ margin: 0 }}>Carregando…</p>
+                )}
+                {logins && logins.length === 0 && (
+                  <p className="mesa-audio-note" style={{ margin: 0 }}>Nenhum login ainda.</p>
+                )}
+                {logins && logins.length > 0 && (
+                  <ul className="mesa-logins">
+                    {logins.map((l) => (
+                      <li key={l.login}>
+                        <strong>{l.display || l.login}</strong> fez login pela primeira vez em{" "}
+                        {new Date(l.firstLoginAt).toLocaleString("pt-BR")}
+                        {l.approx ? " (aproximado)" : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ),
+          },
+        ]
+      : []),
     {
       id: "atalhos",
       nome: "Atalhos",

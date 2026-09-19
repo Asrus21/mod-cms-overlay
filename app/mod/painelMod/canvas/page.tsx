@@ -21,6 +21,7 @@ export default function CanvasPage() {
 
   return (
     <CanvasClient
+      modName={session.display}
       modSlug={modSlug(session.name)}
       vdoRoom={vdoRoom}
       vdoPassword={vdoPassword}

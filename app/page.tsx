@@ -75,7 +75,7 @@ export default function Home() {
 
         <motion.a
           className="landing-cta"
-          href="/mod/painelMod"
+          href="/mod/painelMod/canvas"
           variants={item}
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
