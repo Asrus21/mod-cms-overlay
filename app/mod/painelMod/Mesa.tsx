@@ -926,6 +926,105 @@ export function Mesa({
     };
   }
 
+  // --- Editores: quem pode usar a mesa deste streamer ---
+  //
+  // Moderar o canal na Twitch nao da mais acesso (ver lib/access.ts). O
+  // streamer gera um codigo aqui e entrega a quem quiser; quem digita o codigo
+  // no campo da barra de cima ganha acesso.
+  type Convite = {
+    id: string;
+    code: string;
+    forLogin: string;
+    usedBy: string;
+    usedAt: string | null;
+  };
+  const [convites, setConvites] = useState<Convite[]>([]);
+  const [editores, setEditores] = useState<{ userLogin: string; grantedBy: string }[]>([]);
+  const [convitePara, setConvitePara] = useState("");
+  const [gerando, setGerando] = useState(false);
+  const [editoresErro, setEditoresErro] = useState("");
+  const [codigoCopiado, setCodigoCopiado] = useState("");
+
+  const carregarEditores = useCallback(async (slug: string) => {
+    if (!slug) {
+      setConvites([]);
+      setEditores([]);
+      return;
+    }
+    setEditoresErro("");
+    try {
+      const [ci, ce] = await Promise.all([
+        fetch(`/api/invites?streamer=${encodeURIComponent(slug)}`),
+        fetch(`/api/access?streamer=${encodeURIComponent(slug)}`),
+      ]);
+      const di = await ci.json().catch(() => ({}));
+      const de = await ce.json().catch(() => ({}));
+      if (!ci.ok) throw new Error(di.error || di.reason || "Falha ao ler os convites");
+      setConvites(Array.isArray(di.invites) ? di.invites : []);
+      setEditores(Array.isArray(de.grants) ? de.grants : []);
+    } catch (err) {
+      setEditoresErro(err instanceof Error ? err.message : "Falha ao ler os editores");
+    }
+  }, []);
+
+  // So busca quando a aba e aberta: sao duas consultas por streamer.
+  useEffect(() => {
+    if (grupoAberto !== "editores") return;
+    carregarEditores(streamerSlug);
+  }, [grupoAberto, streamerSlug, carregarEditores]);
+
+  async function gerarConvite() {
+    if (!streamerSlug || gerando) return;
+    setGerando(true);
+    setEditoresErro("");
+    try {
+      const res = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streamer: streamerSlug,
+          streamerName: streamerName || streamerSlug,
+          forLogin: convitePara,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Falha ao gerar o código");
+      setConvitePara("");
+      await carregarEditores(streamerSlug);
+    } catch (err) {
+      setEditoresErro(err instanceof Error ? err.message : "Erro ao gerar");
+    } finally {
+      setGerando(false);
+    }
+  }
+
+  async function apagarConvite(id: string) {
+    try {
+      await fetch("/api/invites", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await carregarEditores(streamerSlug);
+    } catch {
+      /* silencioso: a lista recarrega na proxima abertura */
+    }
+  }
+
+  async function tirarEditor(userLogin: string) {
+    if (!confirm(`Tirar o acesso de @${userLogin} a esta mesa?`)) return;
+    try {
+      await fetch("/api/access", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamer: streamerSlug, userLogin }),
+      });
+      await carregarEditores(streamerSlug);
+    } catch {
+      /* idem */
+    }
+  }
+
   // --- O que so existia na pagina do painel, que virou este canvas ---
 
   // Transmitir camera/tela para o OBS do streamer (VDO.Ninja).
@@ -2585,6 +2684,97 @@ export function Mesa({
         <p className="mesa-audio-note" style={{ margin: 0 }}>
           Escolha um streamer para ver o link.
         </p>
+      ),
+    },
+    {
+      id: "editores",
+      nome: "Editores",
+      resumo: "quem pode usar esta mesa",
+      conteudo: (
+        <>
+          {editoresErro && <p className="scene-erro">⚠️ {editoresErro}</p>}
+
+          <p className="mesa-audio-note" style={{ margin: "0 0 0.5rem" }}>
+            Gere um código e entregue a quem vai mexer na sua mesa. Quem recebe digita
+            o código no campo <strong>ao lado do link do OBS</strong>, lá em cima. Não
+            precisa ser mod do seu canal.
+          </p>
+
+          <div className="mesa-tool-linha">
+            <input
+              placeholder="Usuário da Twitch (ou deixe em branco)"
+              value={convitePara}
+              onChange={(e) => setConvitePara(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") gerarConvite();
+              }}
+              style={{ flex: "1 1 160px" }}
+            />
+            <button
+              className="primary"
+              onClick={gerarConvite}
+              disabled={gerando || !streamerSlug}
+            >
+              {gerando ? "…" : "Gerar código"}
+            </button>
+          </div>
+          <span className="mesa-audio-note">
+            Em branco, o código vale para <strong>quem usar primeiro</strong> — e o nome
+            de quem usou fica registrado aqui. Cada código serve uma vez só.
+          </span>
+
+          {convites.length > 0 && (
+            <ul className="mesa-convites">
+              {convites.map((c) => (
+                <li key={c.id} className={c.usedBy ? "usado" : ""}>
+                  <code>{c.code}</code>
+                  <span className="mesa-convite-quem">
+                    {c.usedBy
+                      ? `usado por @${c.usedBy}`
+                      : c.forLogin
+                      ? `para @${c.forLogin}`
+                      : "para quem usar primeiro"}
+                  </span>
+                  {!c.usedBy && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard
+                          ?.writeText(c.code)
+                          .then(() => setCodigoCopiado(c.id))
+                          .catch(() => setCodigoCopiado(""));
+                      }}
+                      title="Copiar o código"
+                    >
+                      {codigoCopiado === c.id ? "✓" : "📋"}
+                    </button>
+                  )}
+                  <button onClick={() => apagarConvite(c.id)} title="Apagar este código">
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h5 className="mesa-sub">Com acesso hoje</h5>
+          {editores.length === 0 ? (
+            <p className="mesa-audio-note" style={{ margin: 0 }}>
+              Só você. Ninguém mais usa esta mesa.
+            </p>
+          ) : (
+            <ul className="mesa-convites">
+              {editores.map((e) => (
+                <li key={e.userLogin}>
+                  <strong>@{e.userLogin}</strong>
+                  <span className="mesa-convite-quem">liberado por @{e.grantedBy}</span>
+                  <button onClick={() => tirarEditor(e.userLogin)} title="Tirar o acesso">
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       ),
     },
     {
