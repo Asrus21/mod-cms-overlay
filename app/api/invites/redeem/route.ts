@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const convite = await prisma.mesaInvite.findUnique({ where: { code } });
-    const recusa = motivoDeRecusa(convite, quemUsa);
+    const recusa = motivoDeRecusa(convite);
     if (recusa) {
       // 404 so quando o codigo nao existe; o resto e o codigo existir e nao
       // servir para esta pessoa.
@@ -52,12 +52,15 @@ export async function POST(request: NextRequest) {
 
     await prisma.mesaAccess.upsert({
       where: { streamer_userLogin: { streamer: c.streamer, userLogin: quemUsa } },
-      update: { streamerName: c.streamerName, grantedBy: c.createdBy },
+      update: { streamerName: c.streamerName, grantedBy: c.createdBy, label: c.label },
       create: {
         streamer: c.streamer,
         streamerName: c.streamerName,
         userLogin: quemUsa,
         grantedBy: c.createdBy,
+        // O apelido acompanha a concessao: e por ele que o streamer reconhece
+        // quem e cada pessoa na lista de quem tem acesso.
+        label: c.label,
       },
     });
 

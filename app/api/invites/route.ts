@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
 import { canControlStreamer } from "@/lib/access";
 import { streamerSlug } from "@/lib/accounts";
-import { chaveDoCodigo, formatarCodigo, gerarCodigo, normalizarLogin } from "@/lib/invites";
+import { chaveDoCodigo, formatarCodigo, gerarCodigo, normalizarApelido } from "@/lib/invites";
 import { mensagemDeBanco, tabelaAusente } from "@/lib/db-errors";
 
 // Convites de acesso a mesa de um streamer (aba "Editores" das configuracoes).
@@ -20,7 +20,7 @@ const TENTATIVAS = 5;
 function paraFora(r: {
   id: string;
   code: string;
-  forLogin: string;
+  label: string;
   usedBy: string;
   usedAt: Date | null;
   createdAt: Date;
@@ -28,7 +28,7 @@ function paraFora(r: {
   return {
     id: r.id,
     code: formatarCodigo(r.code),
-    forLogin: r.forLogin,
+    label: r.label,
     usedBy: r.usedBy,
     usedAt: r.usedAt ? r.usedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
@@ -69,24 +69,16 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as {
     streamer?: string;
     streamerName?: string;
-    forLogin?: string;
+    label?: string;
   } | null;
 
   const streamer = streamerSlug(body?.streamer || "");
   if (!streamer) return NextResponse.json({ error: "streamer e obrigatorio" }, { status: 400 });
 
-  // Em branco e proposital: o codigo serve para quem usar primeiro, e o nome
-  // de quem usou fica gravado depois.
-  const forLogin = normalizarLogin(body?.forLogin || "");
-  if (forLogin === null) {
-    return NextResponse.json(
-      { error: "Usuário inválido (3-25: letras, números ou _). Deixe em branco para valer para qualquer um." },
-      { status: 400 }
-    );
-  }
-  if (forLogin && forLogin === streamer) {
-    return NextResponse.json({ error: "O próprio streamer já tem acesso." }, { status: 400 });
-  }
+  // Apelido livre, so para o streamer reconhecer depois quem entrou. Nao
+  // restringe quem pode usar o codigo, entao nao ha o que validar alem do
+  // tamanho — em branco, a lista mostra o usuario da Twitch de quem usou.
+  const label = normalizarApelido(body?.label || "");
   if (!(await canControlStreamer(session.name, session.master, streamer))) {
     return NextResponse.json({ error: "Sem acesso para gerenciar este streamer" }, { status: 403 });
   }
@@ -97,7 +89,7 @@ export async function POST(request: NextRequest) {
     const code = chaveDoCodigo(gerarCodigo());
     try {
       const criado = await prisma.mesaInvite.create({
-        data: { code, streamer, streamerName, forLogin, createdBy: session.name },
+        data: { code, streamer, streamerName, label, createdBy: session.name },
       });
       return NextResponse.json({ ok: true, invite: paraFora(criado) }, { status: 201 });
     } catch (err) {
