@@ -63,6 +63,26 @@ model MesaAccess {
   @@index([streamer])
 }
 
+// Convite de acesso a mesa de um streamer.
+//
+// Moderar o canal na Twitch NAO da mais acesso: o streamer gera um codigo e
+// entrega a quem ele quiser, que pode nem ser mod. Cada codigo vale UMA vez.
+// `forLogin` vazio = serve para quem usar primeiro, e fica registrado em
+// `usedBy` quem foi.
+model MesaInvite {
+  id           String    @id @default(cuid())
+  code         String    @unique // sem tracinho, caixa alta
+  streamer     String // canal cuja mesa o codigo libera
+  streamerName String    @default("")
+  forLogin     String    @default("") // usuario previsto; vazio = qualquer um
+  createdBy    String // quem gerou
+  usedBy       String    @default("") // quem usou (vazio = ainda nao usado)
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([streamer])
+}
+
 // Historico de logins: registra o PRIMEIRO login de cada usuario no painel.
 // So o master (asrus12) ve essa lista. Guardamos apenas o nick da Twitch e a
 // data/hora do primeiro acesso — nada alem disso. `login` = login minusculo

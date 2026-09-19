@@ -4,8 +4,12 @@ import { requireMod } from "@/lib/require-mod";
 
 // GET /api/me/streamers — canais cuja mesa o usuario logado pode controlar:
 //   1. a MESA DELE MESMO (todo mundo que loga e streamer do proprio canal),
-//   2. os canais que ele modera na Twitch,
-//   3. os canais cuja mesa alguem concedeu a ele "na mao" (MesaAccess).
+//   2. os canais a que ele recebeu acesso (convite aceito ou concessao),
+//   3. so para o MASTER: tambem os canais que ele modera na Twitch.
+//
+// Moderar deixou de dar acesso por si so (ver lib/access.ts): para entrar na
+// mesa de alguem agora e preciso um convite daquele streamer. A lista aqui
+// segue a mesma regra, senao mostraria canais que o usuario nao consegue usar.
 // A propria mesa vem sempre em primeiro na lista (marcada com `self`).
 // Tambem devolve se ele e master (asrus12), que pode buscar qualquer streamer.
 export async function GET(request: NextRequest) {
@@ -25,16 +29,18 @@ export async function GET(request: NextRequest) {
   if (self) byLogin.set(self.login, self);
 
   try {
-    // Canais que ele modera na Twitch.
-    const mods = await prisma.moderatedChannel.findMany({
-      where: { modLogin: session.name },
-      orderBy: { broadcasterName: "asc" },
-    });
-    for (const r of mods) {
-      if (byLogin.has(r.broadcasterLogin)) continue;
-      byLogin.set(r.broadcasterLogin, { login: r.broadcasterLogin, name: r.broadcasterName });
+    // So o master enxerga os canais que modera sem precisar de convite.
+    if (session.master) {
+      const mods = await prisma.moderatedChannel.findMany({
+        where: { modLogin: session.name },
+        orderBy: { broadcasterName: "asc" },
+      });
+      for (const r of mods) {
+        if (byLogin.has(r.broadcasterLogin)) continue;
+        byLogin.set(r.broadcasterLogin, { login: r.broadcasterLogin, name: r.broadcasterName });
+      }
     }
-    // Streamers cuja mesa ele recebeu acesso "na mao" (sem ser mod).
+    // Streamers cuja mesa ele recebeu acesso (convite aceito ou concessao).
     const grants = await prisma.mesaAccess.findMany({
       where: { userLogin: session.name },
       orderBy: { streamerName: "asc" },

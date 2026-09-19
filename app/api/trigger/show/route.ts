@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireMod } from "@/lib/require-mod";
+import { canControlStreamer } from "@/lib/access";
 import { publishShowMedia } from "@/lib/realtime";
 import { modSlug, streamerSlug } from "@/lib/accounts";
 import { clampPos } from "@/lib/stage";
@@ -113,6 +114,17 @@ export async function POST(request: NextRequest) {
   const streamer = streamerSlug(body.streamer || "");
   if (!streamer) {
     return NextResponse.json({ error: "Escolha um streamer primeiro" }, { status: 400 });
+  }
+
+  // Quem pode mexer na mesa deste streamer? So o proprio, o master, ou quem
+  // recebeu acesso (convite aceito). Sem esta checagem o convite nao protegeria
+  // nada: bastava mandar outro `streamer` no corpo do pedido para publicar no
+  // overlay de qualquer um.
+  if (!(await canControlStreamer(session.name, session.master, streamer))) {
+    return NextResponse.json(
+      { error: "Você não tem acesso à mesa deste streamer." },
+      { status: 403 }
+    );
   }
 
   // Cada exibicao e um "item" independente (varios coexistem). A mesa manda o

@@ -4,8 +4,13 @@ import { prisma } from "./db";
 // Uma pessoa PODE controlar/gerenciar a mesa de `streamer` se:
 //   - e o usuario master (asrus12), OU
 //   - e o proprio streamer (login == streamer), OU
-//   - modera aquele canal na Twitch (ModeratedChannel), OU
-//   - recebeu acesso concedido no painel (MesaAccess).
+//   - recebeu acesso (MesaAccess) — na mao ou usando um codigo de convite.
+//
+// MODERAR O CANAL NA TWITCH NAO DA MAIS ACESSO. Antes dava, e isso significava
+// que qualquer mod de um canal entrava na mesa daquele canal sem o streamer
+// decidir nada. Agora o streamer gera um convite (lib/invites.ts) e entrega a
+// quem quiser — que nem precisa ser mod. O master segue por cima da regra.
+//
 // A concessao usa a mesma regra: so quem ja tem acesso pode conceder a outrem.
 
 export async function canControlStreamer(
@@ -19,10 +24,6 @@ export async function canControlStreamer(
   if (master) return true;
   if (me === s) return true;
   try {
-    const mod = await prisma.moderatedChannel.findFirst({
-      where: { modLogin: me, broadcasterLogin: s },
-    });
-    if (mod) return true;
     const grant = await prisma.mesaAccess.findUnique({
       where: { streamer_userLogin: { streamer: s, userLogin: me } },
     });

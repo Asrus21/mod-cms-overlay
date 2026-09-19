@@ -36,6 +36,10 @@ export function CanvasClient({
   const [master, setMaster] = useState(false);
   // Busca livre do master: alcanca qualquer canal, mesmo fora da lista.
   const [busca, setBusca] = useState("");
+  // Codigo de convite: quem recebe um digita aqui e passa a ter acesso a mesa
+  // daquele streamer, sem precisar ser mod do canal.
+  const [codigo, setCodigo] = useState("");
+  const [usandoCodigo, setUsandoCodigo] = useState(false);
 
   // Streamer atual: mesma chave do painel, para a tela exclusiva abrir ja no
   // streamer que o usuario estava usando la (e vice-versa).
@@ -95,7 +99,12 @@ export function CanvasClient({
 
   function pick(slug: string) {
     const entry = lista.find((s) => s.slug === slug);
-    if (!entry) return;
+    if (entry) pickEntry(entry);
+  }
+
+  // Abre a mesa de um streamer e lembra a escolha. Separado de `pick` porque o
+  // convite ja traz a entrada pronta, antes de ela estar na lista.
+  function pickEntry(entry: StreamerEntry) {
     setStreamer(entry);
     try {
       localStorage.setItem("streamerAtual", JSON.stringify(entry));
@@ -106,6 +115,31 @@ export function CanvasClient({
   }
 
   const overlayUrl = streamer ? `${PUBLIC_ORIGIN}/overlay/${streamer.slug}` : "";
+
+  async function usarCodigo() {
+    const c = codigo.trim();
+    if (!c || usandoCodigo) return;
+    setUsandoCodigo(true);
+    try {
+      const res = await fetch("/api/invites/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: c }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Código inválido");
+      setCodigo("");
+      const novo: StreamerEntry = { slug: data.streamer, name: data.streamerName };
+      // Entra na lista e ja abre a mesa liberada.
+      setLista((antes) => (antes.some((x) => x.slug === novo.slug) ? antes : [...antes, novo]));
+      pickEntry(novo);
+      alert(`Pronto! Você agora tem acesso à mesa de ${novo.name}.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Não foi possível usar o código");
+    } finally {
+      setUsandoCodigo(false);
+    }
+  }
 
   async function copyOverlay() {
     if (!overlayUrl) return;
@@ -152,20 +186,31 @@ export function CanvasClient({
                 if (e.key !== "Enter") return;
                 const slug = streamerSlug(busca);
                 if (!slug) return;
-                setStreamer({ slug, name: busca.trim() });
-                try {
-                  localStorage.setItem(
-                    "streamerAtual",
-                    JSON.stringify({ slug, name: busca.trim() })
-                  );
-                } catch {
-                  /* sem storage: so nao lembra na proxima visita */
-                }
+                pickEntry({ slug, name: busca.trim() });
                 setBusca("");
               }}
             />
           </label>
         )}
+
+        {/* Codigo de convite, ao lado do link do OBS: e o caminho de quem
+            recebeu acesso de um streamer. */}
+        <label className="canvas-codigo">
+          <span className="sr-only">Código de convite</span>
+          <input
+            placeholder="Código de acesso…"
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") usarCodigo();
+            }}
+          />
+          {codigo.trim() && (
+            <button className="primary" onClick={usarCodigo} disabled={usandoCodigo}>
+              {usandoCodigo ? "…" : "Usar"}
+            </button>
+          )}
+        </label>
 
         {overlayUrl && (
           <button onClick={copyOverlay} title={overlayUrl}>
