@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { Mesa } from "../Mesa";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
+import { streamerSlug } from "@/lib/slug";
 
 type MediaType = "IMAGE" | "GIF" | "VIDEO" | "AUDIO";
 
@@ -18,11 +18,13 @@ type Media = {
 type StreamerEntry = { slug: string; name: string; self?: boolean };
 
 export function CanvasClient({
+  modName,
   modSlug,
   vdoRoom,
   vdoPassword,
   twitchChannel,
 }: {
+  modName: string;
   modSlug: string;
   vdoRoom: string;
   vdoPassword: string;
@@ -31,6 +33,9 @@ export function CanvasClient({
   const [streamer, setStreamer] = useState<StreamerEntry | null>(null);
   const [lista, setLista] = useState<StreamerEntry[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
+  const [master, setMaster] = useState(false);
+  // Busca livre do master: alcanca qualquer canal, mesmo fora da lista.
+  const [busca, setBusca] = useState("");
 
   // Streamer atual: mesma chave do painel, para a tela exclusiva abrir ja no
   // streamer que o usuario estava usando la (e vice-versa).
@@ -61,6 +66,7 @@ export function CanvasClient({
           })
         );
         setLista(list);
+        setMaster(Boolean(data.master));
         const found = last ? list.find((s) => s.slug === last!.slug) : undefined;
         const freeSearch = !found && last && data.master ? last : null;
         const initial = found ?? freeSearch ?? list.find((s) => s.self);
@@ -113,12 +119,10 @@ export function CanvasClient({
 
   return (
     <>
-      {/* Barra flutuante do topo: voltar, streamer atual e link do OBS. */}
+      {/* Barra flutuante do topo: streamer atual e link do OBS. Nao ha mais
+          "voltar": o canvas E o painel, e /mod/painelMod so redireciona para
+          ca. */}
       <header className="canvas-topbar">
-        <Link className="canvas-back" href="/mod/painelMod">
-          ← Painel
-        </Link>
-
         <label className="canvas-streamer">
           <span>Streamer</span>
           <select value={streamer?.slug ?? ""} onChange={(e) => pick(e.target.value)}>
@@ -136,6 +140,33 @@ export function CanvasClient({
           </select>
         </label>
 
+        {/* So o master: abrir a mesa de um canal que nao esta na lista dele. */}
+        {master && (
+          <label className="canvas-busca">
+            <span className="sr-only">Buscar streamer</span>
+            <input
+              placeholder="Abrir outro canal…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                const slug = streamerSlug(busca);
+                if (!slug) return;
+                setStreamer({ slug, name: busca.trim() });
+                try {
+                  localStorage.setItem(
+                    "streamerAtual",
+                    JSON.stringify({ slug, name: busca.trim() })
+                  );
+                } catch {
+                  /* sem storage: so nao lembra na proxima visita */
+                }
+                setBusca("");
+              }}
+            />
+          </label>
+        )}
+
         {overlayUrl && (
           <button onClick={copyOverlay} title={overlayUrl}>
             📋 Copiar link do OBS
@@ -149,7 +180,9 @@ export function CanvasClient({
         modSlug={modSlug}
         streamerSlug={streamer?.slug ?? ""}
         streamerName={streamer?.name ?? ""}
+        modName={modName}
         onAction={carregarMidia}
+        master={master}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}
         twitchChannel={twitchChannel}
