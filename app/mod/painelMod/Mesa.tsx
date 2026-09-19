@@ -147,6 +147,7 @@ export function Mesa({
   vdoPassword,
   twitchChannel,
   modName = "",
+  meuCanal = "",
   master = false,
   fullscreen = false,
 }: {
@@ -160,6 +161,8 @@ export function Mesa({
   twitchChannel: string;
   // Nome de exibicao: e dele que sai o streamId do ao vivo.
   modName?: string;
+  // Canal do proprio usuario. A aba "Editores" e sempre sobre ele.
+  meuCanal?: string;
   // Historico de logins e so do master.
   master?: boolean;
   // true = tela exclusiva (palco em tela cheia + paineis flutuantes).
@@ -927,7 +930,13 @@ export function Mesa({
     };
   }
 
-  // --- Editores: quem pode usar a mesa deste streamer ---
+  // --- Editores: quem pode usar a MINHA mesa ---
+  //
+  // Sempre sobre o canal do proprio usuario, NUNCA sobre o streamer que esta
+  // aberto na mesa. Antes usava o streamer aberto, e o resultado era gerar um
+  // convite para a mesa DE OUTRA PESSOA so porque ela estava selecionada —
+  // que e o oposto do que a aba quer dizer ("quem pode usar esta mesa" = a
+  // minha).
   //
   // Moderar o canal na Twitch nao da mais acesso (ver lib/access.ts). O
   // streamer gera um codigo aqui e entrega a quem quiser; quem digita o codigo
@@ -968,14 +977,14 @@ export function Mesa({
     }
   }, []);
 
-  // So busca quando a aba e aberta: sao duas consultas por streamer.
+  // So busca quando a aba e aberta: sao duas consultas.
   useEffect(() => {
     if (grupoAberto !== "editores") return;
-    carregarEditores(streamerSlug);
-  }, [grupoAberto, streamerSlug, carregarEditores]);
+    carregarEditores(meuCanal);
+  }, [grupoAberto, meuCanal, carregarEditores]);
 
   async function gerarConvite() {
-    if (!streamerSlug || gerando) return;
+    if (!meuCanal || gerando) return;
     setGerando(true);
     setEditoresErro("");
     try {
@@ -983,15 +992,15 @@ export function Mesa({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          streamer: streamerSlug,
-          streamerName: streamerName || streamerSlug,
+          streamer: meuCanal,
+          streamerName: modName || meuCanal,
           label: convitePara,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Falha ao gerar o código");
       setConvitePara("");
-      await carregarEditores(streamerSlug);
+      await carregarEditores(meuCanal);
     } catch (err) {
       setEditoresErro(err instanceof Error ? err.message : "Erro ao gerar");
     } finally {
@@ -1006,7 +1015,7 @@ export function Mesa({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      await carregarEditores(streamerSlug);
+      await carregarEditores(meuCanal);
     } catch {
       /* silencioso: a lista recarrega na proxima abertura */
     }
@@ -1018,9 +1027,9 @@ export function Mesa({
       await fetch("/api/access", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ streamer: streamerSlug, userLogin }),
+        body: JSON.stringify({ streamer: meuCanal, userLogin }),
       });
-      await carregarEditores(streamerSlug);
+      await carregarEditores(meuCanal);
     } catch {
       /* idem */
     }
@@ -2690,15 +2699,17 @@ export function Mesa({
     {
       id: "editores",
       nome: "Editores",
-      resumo: "quem pode usar esta mesa",
+      resumo: "quem pode usar a sua mesa",
       conteudo: (
         <>
           {editoresErro && <p className="scene-erro">⚠️ {editoresErro}</p>}
 
           <p className="mesa-audio-note" style={{ margin: "0 0 0.5rem" }}>
-            Gere um código e entregue a quem vai mexer na sua mesa. Quem recebe digita
-            o código no campo <strong>ao lado do link do OBS</strong>, lá em cima. Não
-            precisa ser mod do seu canal.
+            Quem pode mexer na <strong>sua mesa</strong>
+            {meuCanal ? <> (<strong>{meuCanal}</strong>)</> : null} — vale para ela,
+            não para o canal que estiver aberto aí em cima. Gere um código e entregue a
+            quem quiser; a pessoa digita no campo{" "}
+            <strong>ao lado do link do OBS</strong>. Não precisa ser mod do seu canal.
           </p>
 
           <div className="mesa-tool-linha">
@@ -2714,7 +2725,7 @@ export function Mesa({
             <button
               className="primary"
               onClick={gerarConvite}
-              disabled={gerando || !streamerSlug}
+              disabled={gerando || !meuCanal}
             >
               {gerando ? "…" : "Gerar código"}
             </button>

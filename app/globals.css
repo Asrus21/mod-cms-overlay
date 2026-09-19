@@ -2439,3 +2439,41 @@ button:disabled {
   letter-spacing: 0.05em;
   opacity: 0.6;
 }
+
+/* Cadeado de acesso removido: cobre a mesa inteira. Acima de tudo (o menu da
+   engrenagem vai a 61), porque nada mais ali funciona sem acesso. */
+.acesso-removido {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(6, 7, 11, 0.86);
+  backdrop-filter: blur(3px);
+}
+.acesso-removido-caixa {
+  width: min(24rem, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 1.6rem 1.3rem;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #12141c;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+.acesso-removido-icone {
+  font-size: 2rem;
+  line-height: 1;
+}
+.acesso-removido-caixa strong {
+  font-size: 1.05rem;
+}
+.acesso-removido-caixa p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  opacity: 0.8;
+}

@@ -34,6 +34,11 @@ export function CanvasClient({
   const [lista, setLista] = useState<StreamerEntry[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
   const [master, setMaster] = useState(false);
+  // Canal do proprio usuario. A aba "Editores" e sempre sobre ELE, nunca sobre
+  // o streamer que esta aberto na mesa no momento.
+  const [meuCanal, setMeuCanal] = useState("");
+  // O acesso a mesa aberta foi tirado enquanto ela estava em uso?
+  const [acessoRemovido, setAcessoRemovido] = useState(false);
   // Busca livre do master: alcanca qualquer canal, mesmo fora da lista.
   const [busca, setBusca] = useState("");
   // Codigo de convite: quem recebe um digita aqui e passa a ter acesso a mesa
@@ -71,6 +76,7 @@ export function CanvasClient({
         );
         setLista(list);
         setMaster(Boolean(data.master));
+        setMeuCanal(String(data.login || "").toLowerCase());
         const found = last ? list.find((s) => s.slug === last!.slug) : undefined;
         const freeSearch = !found && last && data.master ? last : null;
         const initial = found ?? freeSearch ?? list.find((s) => s.self);
@@ -78,6 +84,52 @@ export function CanvasClient({
       })
       .catch(() => {});
   }, []);
+
+  // Confere se o acesso a mesa aberta ainda vale.
+  //
+  // O streamer pode tirar o acesso de alguem a qualquer momento, e quem esta
+  // com a mesa aberta continuaria mexendo nela ate tentar alguma coisa. Aqui a
+  // lista e relida de tempos em tempos (e sempre que a aba volta ao foco, que
+  // e quando a pessoa costuma voltar a mexer): se o canal sumiu de la, ele sai
+  // da lista na hora e a tela e trancada.
+  const conferirAcesso = useCallback(async () => {
+    // A propria mesa e a busca livre do master nunca dependem de concessao.
+    if (!streamer || streamer.self || streamer.slug === meuCanal || master) return;
+    try {
+      const r = await fetch("/api/me/streamers");
+      if (!r.ok) return;
+      const data = await r.json();
+      const logins: string[] = (data.streamers || []).map((x: { login: string }) => x.login);
+      if (logins.includes(streamer.slug)) return;
+      setLista((antes) => antes.filter((x) => x.slug !== streamer.slug));
+      setAcessoRemovido(true);
+    } catch {
+      // Sem rede: nao da para concluir nada; tenta de novo no proximo ciclo.
+    }
+  }, [streamer, meuCanal, master]);
+
+  useEffect(() => {
+    if (!streamer || streamer.self || streamer.slug === meuCanal || master) {
+      setAcessoRemovido(false);
+      return;
+    }
+    const id = setInterval(conferirAcesso, 20000);
+    const aoFocar = () => conferirAcesso();
+    window.addEventListener("focus", aoFocar);
+    document.addEventListener("visibilitychange", aoFocar);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", aoFocar);
+      document.removeEventListener("visibilitychange", aoFocar);
+    };
+  }, [conferirAcesso, streamer, meuCanal, master]);
+
+  // Volta para a propria mesa depois de perder o acesso.
+  function voltarParaMinhaMesa() {
+    setAcessoRemovido(false);
+    const minha = lista.find((x) => x.self) ?? (meuCanal ? { slug: meuCanal, name: meuCanal, self: true } : null);
+    if (minha) pickEntry(minha);
+  }
 
   // Biblioteca de midias do usuario (para o seletor "Colocar na mesa").
   //
@@ -226,12 +278,33 @@ export function CanvasClient({
         streamerSlug={streamer?.slug ?? ""}
         streamerName={streamer?.name ?? ""}
         modName={modName}
+        meuCanal={meuCanal}
         onAction={carregarMidia}
         master={master}
         vdoRoom={vdoRoom}
         vdoPassword={vdoPassword}
         twitchChannel={twitchChannel}
       />
+
+      {/* Cadeado: o acesso a esta mesa foi tirado enquanto ela estava aberta.
+          Cobre a tela inteira porque qualquer acao daqui em diante ja seria
+          recusada pelo servidor — melhor dizer o que houve do que deixar a
+          pessoa tentando. */}
+      {acessoRemovido && streamer && (
+        <div className="acesso-removido" role="alertdialog" aria-modal="true">
+          <div className="acesso-removido-caixa">
+            <span className="acesso-removido-icone" aria-hidden="true">🔒</span>
+            <strong>Seu acesso foi removido</strong>
+            <p>
+              Você não tem mais acesso à mesa de <strong>{streamer.name}</strong>. O
+              canal saiu da sua lista.
+            </p>
+            <button className="primary" onClick={voltarParaMinhaMesa}>
+              Ir para a minha mesa
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
