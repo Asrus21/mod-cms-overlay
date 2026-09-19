@@ -9,6 +9,7 @@ import { clampPos } from "@/lib/stage";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { nomeDoArquivo, tipoDoArquivo, type TipoMidia } from "@/lib/media-tipo";
 import { filtrarEmotes, type Emote } from "@/lib/emotes";
+import { rotuloDoConvite } from "@/lib/invites";
 import {
   QUALIDADES,
   QUALIDADE_PADRAO,
@@ -934,12 +935,12 @@ export function Mesa({
   type Convite = {
     id: string;
     code: string;
-    forLogin: string;
+    label: string;
     usedBy: string;
     usedAt: string | null;
   };
   const [convites, setConvites] = useState<Convite[]>([]);
-  const [editores, setEditores] = useState<{ userLogin: string; grantedBy: string }[]>([]);
+  const [editores, setEditores] = useState<{ userLogin: string; grantedBy: string; label: string }[]>([]);
   const [convitePara, setConvitePara] = useState("");
   const [gerando, setGerando] = useState(false);
   const [editoresErro, setEditoresErro] = useState("");
@@ -984,7 +985,7 @@ export function Mesa({
         body: JSON.stringify({
           streamer: streamerSlug,
           streamerName: streamerName || streamerSlug,
-          forLogin: convitePara,
+          label: convitePara,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -2702,7 +2703,7 @@ export function Mesa({
 
           <div className="mesa-tool-linha">
             <input
-              placeholder="Usuário da Twitch (ou deixe em branco)"
+              placeholder="Apelido (ex.: Eu em outra conta)"
               value={convitePara}
               onChange={(e) => setConvitePara(e.target.value)}
               onKeyDown={(e) => {
@@ -2719,8 +2720,9 @@ export function Mesa({
             </button>
           </div>
           <span className="mesa-audio-note">
-            Em branco, o código vale para <strong>quem usar primeiro</strong> — e o nome
-            de quem usou fica registrado aqui. Cada código serve uma vez só.
+            O apelido é só para <strong>você reconhecer</strong> quem entrou — escreva
+            do jeito que quiser. Em branco, aparece o usuário da Twitch de quem usou.
+            Qualquer pessoa com o código pode usá-lo, e cada código serve uma vez só.
           </span>
 
           {convites.length > 0 && (
@@ -2729,11 +2731,11 @@ export function Mesa({
                 <li key={c.id} className={c.usedBy ? "usado" : ""}>
                   <code>{c.code}</code>
                   <span className="mesa-convite-quem">
-                    {c.usedBy
-                      ? `usado por @${c.usedBy}`
-                      : c.forLogin
-                      ? `para @${c.forLogin}`
-                      : "para quem usar primeiro"}
+                    {rotuloDoConvite(c.label, c.usedBy)}
+                    {/* Com apelido, o usuario da Twitch vai junto em miudo:
+                        e por ele que se tira o acesso depois. */}
+                    {c.usedBy && c.label ? ` · @${c.usedBy}` : ""}
+                    {!c.usedBy && c.label ? " · ainda não usado" : ""}
                   </span>
                   {!c.usedBy && (
                     <button
@@ -2765,8 +2767,11 @@ export function Mesa({
             <ul className="mesa-convites">
               {editores.map((e) => (
                 <li key={e.userLogin}>
-                  <strong>@{e.userLogin}</strong>
-                  <span className="mesa-convite-quem">liberado por @{e.grantedBy}</span>
+                  <strong>{e.label || `@${e.userLogin}`}</strong>
+                  <span className="mesa-convite-quem">
+                    {e.label ? `@${e.userLogin} · ` : ""}
+                    liberado por @{e.grantedBy}
+                  </span>
                   <button onClick={() => tirarEditor(e.userLogin)} title="Tirar o acesso">
                     ✕
                   </button>

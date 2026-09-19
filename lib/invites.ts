@@ -72,26 +72,30 @@ export function chaveDoCodigo(codigo: string): string {
   return (codigo || "").replace(/[\s\-]/g, "").toUpperCase();
 }
 
-// Login da Twitch de quem vai usar o convite (opcional).
-const LOGIN_RE = /^[a-zA-Z0-9_]{3,25}$/;
+// Apelido do convite: texto livre, so para o streamer reconhecer quem entrou
+// ("Eu em outra conta", "editor do clipe", o nome da pessoa...). NAO restringe
+// quem pode usar o codigo e nao tem relacao com o login da Twitch.
+export const MAX_APELIDO = 40;
 
-export function normalizarLogin(bruto: string): string | null {
-  const v = (bruto || "").trim().replace(/^@/, "").toLowerCase();
-  if (!v) return "";        // em branco e valido: vale para quem usar primeiro
-  return LOGIN_RE.test(v) ? v : null;
+export function normalizarApelido(bruto: string): string {
+  return (bruto || "").trim().replace(/\s+/g, " ").slice(0, MAX_APELIDO);
 }
 
-// Um convite so pode ser usado por quem ele nomeia — e so uma vez.
-export type EstadoConvite = { forLogin: string; usedBy: string };
+// Como identificar na lista quem usou (ou vai usar) um convite.
+// Sem apelido, vale o usuario da Twitch de quem usou.
+export function rotuloDoConvite(apelido: string, usedBy: string): string {
+  const a = normalizarApelido(apelido);
+  if (a) return a;
+  if (usedBy) return `@${usedBy}`;
+  return "para quem usar primeiro";
+}
 
-export function motivoDeRecusa(
-  convite: EstadoConvite | null,
-  quemUsa: string
-): string | null {
+// Um convite so pode ser usado uma vez. Quem usa nao importa: o codigo e a
+// credencial, e quem o recebeu foi escolhido pelo streamer ao entregar.
+export type EstadoConvite = { usedBy: string };
+
+export function motivoDeRecusa(convite: EstadoConvite | null): string | null {
   if (!convite) return "Código não encontrado. Confira as letras e tente de novo.";
   if (convite.usedBy) return "Este código já foi usado.";
-  if (convite.forLogin && convite.forLogin !== quemUsa.trim().toLowerCase()) {
-    return `Este código foi criado para @${convite.forLogin}.`;
-  }
   return null;
 }

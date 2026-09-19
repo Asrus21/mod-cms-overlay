@@ -55,6 +55,7 @@ model MesaAccess {
   streamer     String // login do streamer (canal)
   streamerName String   @default("") // nome de exibicao do streamer
   userLogin    String // quem ganhou acesso
+  label        String   @default("") // apelido vindo do convite, para reconhecer
   grantedBy    String // quem concedeu
   createdAt    DateTime @default(now())
 
@@ -67,14 +68,16 @@ model MesaAccess {
 //
 // Moderar o canal na Twitch NAO da mais acesso: o streamer gera um codigo e
 // entrega a quem ele quiser, que pode nem ser mod. Cada codigo vale UMA vez.
-// `forLogin` vazio = serve para quem usar primeiro, e fica registrado em
-// `usedBy` quem foi.
+//
+// `label` e um apelido livre, so para o streamer reconhecer a quem entregou o
+// codigo ("Eu em outra conta", "editor do clipe"). Nao restringe quem pode
+// usar. Vazio: a lista mostra o usuario da Twitch de quem usou (`usedBy`).
 model MesaInvite {
   id           String    @id @default(cuid())
   code         String    @unique // sem tracinho, caixa alta
   streamer     String // canal cuja mesa o codigo libera
   streamerName String    @default("")
-  forLogin     String    @default("") // usuario previsto; vazio = qualquer um
+  label        String    @default("") // apelido livre; vazio = mostra o usuario da Twitch
   createdBy    String // quem gerou
   usedBy       String    @default("") // quem usou (vazio = ainda nao usado)
   usedAt       DateTime?

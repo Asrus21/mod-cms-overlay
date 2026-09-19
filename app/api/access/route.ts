@@ -21,13 +21,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sem acesso a este streamer" }, { status: 403 });
   }
 
-  let grants: { userLogin: string; grantedBy: string }[] = [];
+  let grants: { userLogin: string; grantedBy: string; label: string }[] = [];
   try {
     const rows = await prisma.mesaAccess.findMany({
       where: { streamer },
       orderBy: { createdAt: "asc" },
     });
-    grants = rows.map((r) => ({ userLogin: r.userLogin, grantedBy: r.grantedBy }));
+    grants = rows.map((r) => ({ userLogin: r.userLogin, grantedBy: r.grantedBy, label: r.label }));
   } catch (err) {
     console.warn("[access] list falhou:", err instanceof Error ? err.message : err);
   }
