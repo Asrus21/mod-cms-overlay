@@ -99,6 +99,9 @@ export async function POST(request: NextRequest) {
           volume,
           muted,
           ...(typeof hidden === "boolean" ? { hidden } : {}),
+          // Mostrado a mao durante a pausa: sai dela. Senao um Parar depois
+          // de um Continuar parcial confundiria o que e de quem.
+          ...(hidden === false ? { pausado: false } : {}),
         },
       });
     } catch {

@@ -141,6 +141,9 @@ model OverlayState {
   volume    Float      @default(1) // volume do audio/video (0..1)
   muted     Boolean    @default(false) // som mutado?
   hidden    Boolean    @default(false) // oculto (nao mostra no overlay nem toca som)
+  // Escondido pelo botao "Parar" da mesa: e o que o "Continuar" mostra de novo.
+  // Ocultar um item a mao NAO marca isto — so o Parar.
+  pausado   Boolean    @default(false)
   sticky    Boolean    @default(false)
   expiresAt DateTime? // para "flash" (nao-sticky): some sozinho depois disso
   updatedAt DateTime   @updatedAt
