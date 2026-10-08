@@ -55,6 +55,8 @@ type PlacedItem = {
   volume: number;
   muted: boolean;
   hidden: boolean;
+  // Escondido pelo botao "Parar" desta mesa (o "Continuar" mostra de novo).
+  pausado?: boolean;
 };
 
 // Intervalo minimo entre mensagens de movimento enviadas ao overlay.
@@ -409,6 +411,7 @@ export function Mesa({
           volume?: number;
           muted?: boolean;
           hidden?: boolean;
+          pausado?: boolean;
         };
         const recovered: PlacedItem[] = (data.items as Row[]).map((row) => {
           const found = row.mediaId ? media.find((m) => m.id === row.mediaId) : undefined;
@@ -430,6 +433,7 @@ export function Mesa({
             volume: typeof row.volume === "number" ? row.volume : 1,
             muted: Boolean(row.muted),
             hidden: Boolean(row.hidden),
+            pausado: Boolean(row.pausado),
           };
         });
 
@@ -1222,6 +1226,64 @@ export function Mesa({
       .catch((e: unknown) => setLoginsErro(e instanceof Error ? e.message : "Falha"));
   }, [master, grupoAberto, logins]);
 
+  // --- Parar / Continuar esta mesa ---
+  //
+  // Trocar de mesa nao esconde nada: o que esta na tela de um streamer fica la
+  // enquanto se mexe em outro. Para tirar tudo da tela DESTE streamer de uma
+  // vez, ha o Parar; o Continuar mostra de novo exatamente o que o Parar
+  // escondeu (o que ja estava oculto antes continua oculto). Fechar a aba e
+  // outra coisa: oculta tudo de vez, em todas as mesas.
+  const mesaParada = items.some((it) => it.pausado);
+  const temVisivel = items.some((it) => !it.hidden);
+  const [pausando, setPausando] = useState(false);
+
+  async function pararOuContinuar() {
+    if (!streamerSlug || pausando) return;
+    const acao = mesaParada ? "continuar" : "parar";
+    setPausando(true);
+    try {
+      const res = await fetch("/api/trigger/pausar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamer: streamerSlug, acao }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Falha ao " + acao);
+      // O servidor diz exatamente quais itens mexeu; a mesa segue isso, e nao
+      // um palpite local que poderia divergir do que foi para a live.
+      const ids = new Set<string>(Array.isArray(data.itens) ? data.itens : []);
+      setItems((prev) =>
+        prev.map((it) =>
+          ids.has(it.itemId)
+            ? acao === "parar"
+              ? { ...it, hidden: true, pausado: true }
+              : { ...it, hidden: false, pausado: false }
+            : it
+        )
+      );
+      onAction();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro");
+    } finally {
+      setPausando(false);
+    }
+  }
+
+  const botaoPausa = (
+    <button
+      className={`mesa-pausa${mesaParada ? " parada" : ""}`}
+      onClick={pararOuContinuar}
+      disabled={pausando || !streamerSlug || (!mesaParada && !temVisivel)}
+      title={
+        mesaParada
+          ? "Mostra de novo na live o que o Parar escondeu"
+          : "Esconde da live tudo o que você deixou visível nesta mesa"
+      }
+    >
+      {pausando ? "…" : mesaParada ? "▶ Continuar" : "⏸ Parar"}
+    </button>
+  );
+
   // Troca o texto de um item que ja esta na mesa.
   //
   // E o mesmo disparo de sempre com o MESMO itemId: a rota de show faz upsert
@@ -1378,7 +1440,10 @@ export function Mesa({
       scaleY: it.scaleY,
       volume: it.volume,
       muted: it.muted,
-      hidden: it.hidden,
+      // Pausado conta como visivel: Parar/Continuar e um intervalo na live,
+      // nao uma mudanca na cena. Sem isto, apertar Parar com uma cena aberta
+      // gravaria a cena inteira como oculta.
+      hidden: it.hidden && !it.pausado,
     }));
   }
 
@@ -1788,7 +1853,10 @@ export function Mesa({
   }
 
   function toggleHidden(item: PlacedItem) {
-    const next = patchItem(item.itemId, { hidden: !item.hidden });
+    const next = patchItem(
+      item.itemId,
+      item.hidden ? { hidden: false, pausado: false } : { hidden: true }
+    );
     if (next) pushMove(next, true);
   }
 
@@ -3392,7 +3460,15 @@ export function Mesa({
         {stage}
 
         <aside className="canvas-panel canvas-panel-left">
-          <h3 className="canvas-panel-title">elementos</h3>
+          <div className="canvas-panel-cabeca">
+            <h3 className="canvas-panel-title">elementos</h3>
+            {botaoPausa}
+          </div>
+          {mesaParada && (
+            <p className="mesa-pausa-aviso">
+              Mesa parada: nada seu aparece na live deste streamer.
+            </p>
+          )}
           {elementsList}
           <h3 className="canvas-panel-title" style={{ marginTop: "1rem" }}>
             cenas

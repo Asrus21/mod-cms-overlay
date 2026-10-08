@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
       volume: r.volume ?? 1,
       muted: r.muted ?? false,
       hidden: r.hidden ?? false,
+      pausado: r.pausado ?? false,
       sticky: r.sticky,
     }));
 

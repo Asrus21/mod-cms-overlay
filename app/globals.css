@@ -2477,3 +2477,46 @@ button:disabled {
   line-height: 1.45;
   opacity: 0.8;
 }
+
+/* Parar / Continuar da mesa, na cabeça do painel "elementos". */
+.canvas-panel-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.canvas-panel-cabeca .canvas-panel-title {
+  margin: 0;
+}
+.mesa-pausa {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.14);
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mesa-pausa:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.28);
+}
+.mesa-pausa.parada {
+  border-color: rgba(34, 197, 94, 0.6);
+  background: rgba(34, 197, 94, 0.16);
+}
+.mesa-pausa.parada:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.3);
+}
+.mesa-pausa:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mesa-pausa-aviso {
+  margin: 0.4rem 0 0.2rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
