@@ -62,6 +62,36 @@ type PlacedItem = {
 // A transicao precisa durar um pouco MAIS que este intervalo; se durar menos,
 // o item termina a animacao e fica parado ate a proxima mensagem, engasgando.
 const MOVE_THROTTLE_MS = 120;
+
+// Registro do que a aba escondeu ao sair (ver "Fechar a aba oculta..." na Mesa).
+const CHAVE_FECHAMENTO = "bastidores:ocultos-ao-sair";
+// Um F5 leva segundos; passou disso, nao e mais "a mesma visita".
+const JANELA_RECARREGAR_MS = 2 * 60 * 1000;
+// Folga para o "mostrar de novo" chegar depois do "ocultar" enviado ao sair.
+const REEXIBIR_APOS_MS = 2500;
+
+// Ids que esta aba escondeu ao sair e que devem voltar a aparecer, para o
+// streamer dado. So vale quando a pagina foi RECARREGADA: reabrir uma aba
+// fechada (Ctrl+Shift+T) tambem devolve o sessionStorage, mas ai a pessoa saiu
+// de verdade e o que estava escondido deve continuar escondido. O registro e
+// consumido na leitura, para nao reexibir de novo numa troca de canal.
+function idsParaReexibir(streamer: string): Set<string> {
+  try {
+    const bruto = sessionStorage.getItem(CHAVE_FECHAMENTO);
+    if (!bruto) return new Set();
+    const nav = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    const reg = JSON.parse(bruto) as { streamer?: string; ids?: string[]; em?: number };
+    if (reg.streamer !== streamer) return new Set();
+    sessionStorage.removeItem(CHAVE_FECHAMENTO);
+    if (nav?.type !== "reload") return new Set();
+    if (!reg.em || Date.now() - reg.em > JANELA_RECARREGAR_MS) return new Set();
+    return new Set(Array.isArray(reg.ids) ? reg.ids : []);
+  } catch {
+    return new Set();
+  }
+}
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5;
 const MIN_SCALE = 0.005;
@@ -297,6 +327,54 @@ export function Mesa({
   // Streamer) — nao ha mais input manual. streamerSlug = login do streamer.
   const twitchCh = streamerSlug;
 
+  // --- Fechar a aba oculta o que o mod deixou a mostra ---
+  //
+  // Sem isto, quem fechasse o canvas com algo visivel deixava aquilo na live
+  // do streamer, sem ninguem para tirar. No `pagehide` (o ultimo evento em que
+  // ainda da para mandar um pedido) avisamos o servidor, que oculta TODOS os
+  // itens visiveis deste mod nos canais dos outros — inclusive de canais que
+  // ele abriu antes nesta sessao e nem estao mais na tela.
+  //
+  // O problema e que `pagehide` tambem dispara no F5. Para um recarregar nao
+  // apagar a live do streamer, guardamos no sessionStorage o que estava visivel
+  // AQUI: ele sobrevive ao recarregar mas morre quando a aba fecha. Na volta,
+  // se a pagina foi recarregada, esses itens sao mostrados de novo.
+  const itensParaFechamento = useRef<{ streamer: string; ids: string[] }>({ streamer: "", ids: [] });
+  useEffect(() => {
+    itensParaFechamento.current = {
+      streamer: streamerSlug,
+      ids: items.filter((it) => !it.hidden).map((it) => it.itemId),
+    };
+  }, [items, streamerSlug]);
+
+  useEffect(() => {
+    function aoSair() {
+      const { streamer, ids } = itensParaFechamento.current;
+      // Na propria mesa o servidor nao mexe (ver a rota), entao nao ha o que
+      // restaurar depois.
+      if (streamer && streamer !== meuCanal && ids.length) {
+        try {
+          sessionStorage.setItem(
+            CHAVE_FECHAMENTO,
+            JSON.stringify({ streamer, ids, em: Date.now() })
+          );
+        } catch {
+          /* sem storage: um F5 vai deixar os itens ocultos, so isso */
+        }
+      }
+      // Sempre avisa, mesmo sem nada visivel AQUI: pode haver itens a mostra
+      // em outro canal aberto antes nesta sessao. Sem itens, o servidor nao
+      // faz nada.
+      const url = "/api/trigger/ocultar-tudo";
+      const foi = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(url);
+      if (!foi) {
+        fetch(url, { method: "POST", keepalive: true }).catch(() => {});
+      }
+    }
+    window.addEventListener("pagehide", aoSair);
+    return () => window.removeEventListener("pagehide", aoSair);
+  }, [meuCanal]);
+
   // Recupera os itens DESTE mod NESTE streamer ao (re)carregar o painel ou ao
   // trocar de streamer — o mod continua de onde parou em vez de ver a mesa
   // vazia. Mesa individual por mod: filtra por owner = o proprio mod.
@@ -354,7 +432,30 @@ export function Mesa({
             hidden: Boolean(row.hidden),
           };
         });
-        setItems(recovered);
+
+        // Foi so um F5? O `pagehide` tambem dispara ao recarregar, e ai a
+        // ocultacao automatica (ver o efeito de fechamento logo abaixo) teria
+        // escondido da live tudo o que estava a mostra. Mostra de volta o que
+        // ESTA aba escondeu ao sair. Fechar a aba de verdade nao passa por
+        // aqui: o sessionStorage morre junto com ela.
+        //
+        // O pedido de ocultar (enviado ao sair) e esta pagina nova correm em
+        // paralelo, e nao da para saber qual chega primeiro: a leitura acima
+        // pode ter visto o item ainda visivel e a ocultacao cair logo depois.
+        // Por isso o reexibir NAO depende do que a leitura viu — e enviado
+        // sempre, e com uma folga, para chegar DEPOIS da ocultacao.
+        const voltar = idsParaReexibir(streamerSlug);
+        const final = voltar.size
+          ? recovered.map((it) => (voltar.has(it.itemId) ? { ...it, hidden: false } : it))
+          : recovered;
+        setItems(final);
+        if (voltar.size) {
+          const reexibir = final.filter((it) => voltar.has(it.itemId));
+          setTimeout(() => {
+            if (cancelled) return;
+            for (const it of reexibir) pushMove(it, true);
+          }, REEXIBIR_APOS_MS);
+        }
       })
       .catch(() => {});
     return () => {
