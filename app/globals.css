@@ -2520,3 +2520,18 @@ button:disabled {
   background: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(34, 197, 94, 0.3);
 }
+
+/* Espelho: o item foi redimensionado passando da borda oposta. Vira SO o
+   conteudo (imagem, vídeo, texto, player) — nunca o próprio item, senão a
+   barrinha, os puxadores e a posição na tela virariam junto. */
+.espelho-x { --fx: -1; }
+.espelho-y { --fy: -1; }
+.overlay-text,
+.overlay-embed,
+.overlay-media,
+.mesa-item > .mesa-text,
+.mesa-item > .mesa-embed,
+.mesa-item > img,
+.mesa-item > video {
+  transform: scale(var(--fx, 1), var(--fy, 1));
+}

@@ -50,6 +50,9 @@ export type ShowMediaPayload = {
   // mesa, pode ser reexibida).
   hidden?: boolean;
   sticky?: boolean;
+  // Espelhado na horizontal/vertical (ver OverlayState.flipX/flipY).
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 // Atualizacao de posicao/escala/som em tempo real enquanto o mod controla a
@@ -64,6 +67,9 @@ export type MovePayload = {
   volume?: number;
   muted?: boolean;
   hidden?: boolean;
+  // Ausente = mantem como esta (o overlay so troca o que vier).
+  flipX?: boolean;
+  flipY?: boolean;
   triggeredAt: number;
 };
 

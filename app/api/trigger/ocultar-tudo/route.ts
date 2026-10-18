@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
         scaleY: v.scaleY,
         volume: v.volume,
         muted: v.muted,
+        flipX: v.flipX,
+        flipY: v.flipY,
         hidden: true,
         triggeredAt: agora,
       })

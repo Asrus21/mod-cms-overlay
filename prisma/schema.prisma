@@ -144,6 +144,10 @@ model OverlayState {
   // Escondido pelo botao "Parar" da mesa: e o que o "Continuar" mostra de novo.
   // Ocultar um item a mao NAO marca isto — so o Parar.
   pausado   Boolean    @default(false)
+  // Espelhado: o item foi redimensionado passando da borda oposta. So vira a
+  // IMAGEM (o conteudo); posicao e tamanho continuam os mesmos.
+  flipX     Boolean    @default(false) // espelho horizontal (esquerda/direita)
+  flipY     Boolean    @default(false) // espelho vertical (cima/baixo)
   sticky    Boolean    @default(false)
   expiresAt DateTime? // para "flash" (nao-sticky): some sozinho depois disso
   updatedAt DateTime   @updatedAt

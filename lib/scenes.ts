@@ -24,6 +24,8 @@ export type SceneItem = {
   volume: number;
   muted: boolean;
   hidden: boolean;
+  flipX: boolean;
+  flipY: boolean;
 };
 
 // Mesmos limites das rotas /trigger/show e /trigger/move.
@@ -85,6 +87,8 @@ export function sanitizeSceneItem(raw: unknown): SceneItem | null {
     volume: clamp(o.volume, 0, 1, 1),
     muted: Boolean(o.muted),
     hidden: Boolean(o.hidden),
+    flipX: Boolean(o.flipX),
+    flipY: Boolean(o.flipY),
   };
 }
 

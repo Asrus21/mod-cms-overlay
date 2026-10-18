@@ -64,6 +64,8 @@ export async function GET(request: NextRequest) {
       muted: r.muted ?? false,
       hidden: r.hidden ?? false,
       pausado: r.pausado ?? false,
+      flipX: r.flipX ?? false,
+      flipY: r.flipY ?? false,
       sticky: r.sticky,
     }));
 

@@ -32,7 +32,14 @@ export type OverlayItem = {
   volume: number;
   muted: boolean;
   hidden: boolean;
+  flipX?: boolean;
+  flipY?: boolean;
 };
+
+// Classes de espelho: so o CONTEUDO vira (ver .espelho-x/.espelho-y no CSS).
+function classeEspelho(it: OverlayItem): string {
+  return `${it.flipX ? " espelho-x" : ""}${it.flipY ? " espelho-y" : ""}`;
+}
 
 // Hook de tempo real do overlay de UM streamer. Sincroniza o estado inicial
 // (via /api/overlay/state) e escuta os eventos do Pusher (websocket) do canal
@@ -130,6 +137,8 @@ export function useOverlayItems(streamer: string): OverlayItem[] {
         volume: typeof payload.volume === "number" ? payload.volume : 1,
         muted: Boolean(payload.muted),
         hidden: Boolean(payload.hidden),
+        flipX: Boolean(payload.flipX),
+        flipY: Boolean(payload.flipY),
       };
       setItems((prev) => {
         const rest = prev.filter((it) => it.itemId !== itemId);
@@ -162,6 +171,8 @@ export function useOverlayItems(streamer: string): OverlayItem[] {
                 volume: typeof payload.volume === "number" ? payload.volume : it.volume,
                 muted: typeof payload.muted === "boolean" ? payload.muted : it.muted,
                 hidden: typeof payload.hidden === "boolean" ? payload.hidden : it.hidden,
+                flipX: typeof payload.flipX === "boolean" ? payload.flipX : it.flipX,
+                flipY: typeof payload.flipY === "boolean" ? payload.flipY : it.flipY,
               }
             : it
         )
@@ -218,7 +229,7 @@ export function OverlayItems({ items }: { items: OverlayItem[] }) {
             "--s": it.scale,
           } as CSSProperties;
           return (
-            <div key={it.itemId} className="overlay-movable text-item" style={style}>
+            <div key={it.itemId} className={`overlay-movable text-item${classeEspelho(it)}`} style={style}>
               <span className="overlay-text">
                 {it.type === "WIDGET" ? (
                   <WidgetView config={parseWidget(it.text)} />
@@ -244,7 +255,7 @@ export function OverlayItems({ items }: { items: OverlayItem[] }) {
           return (
             <div
               key={it.itemId}
-              className={`overlay-movable embed-item${stretched ? " stretched" : ""}`}
+              className={`overlay-movable embed-item${stretched ? " stretched" : ""}${classeEspelho(it)}`}
               style={style}
             >
               <iframe
@@ -282,7 +293,7 @@ export function OverlayItems({ items }: { items: OverlayItem[] }) {
         return (
           <div
             key={it.itemId}
-            className={`overlay-movable${stretched ? " stretched" : ""}`}
+            className={`overlay-movable${stretched ? " stretched" : ""}${classeEspelho(it)}`}
             style={style}
           >
             {it.type === "VIDEO" ? (

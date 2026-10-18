@@ -6,6 +6,7 @@ import { buildObsPushUrl, buildObsViewUrl, buildPushUrl, streamIdFromName } from
 import { WIDGET_LABEL, WidgetView, parseWidget, type WidgetKind } from "../../WidgetView";
 import { MAX_WIDGET_CODE } from "@/lib/widgets";
 import { clampPos } from "@/lib/stage";
+import { centroAPartirDaAncora, espelhoFinal, medidaComEspelho } from "@/lib/espelho";
 import { PUBLIC_ORIGIN } from "@/lib/public-origin";
 import { nomeDoArquivo, tipoDoArquivo, type TipoMidia } from "@/lib/media-tipo";
 import { filtrarEmotes, type Emote } from "@/lib/emotes";
@@ -57,6 +58,9 @@ type PlacedItem = {
   hidden: boolean;
   // Escondido pelo botao "Parar" desta mesa (o "Continuar" mostra de novo).
   pausado?: boolean;
+  // Espelhado ao puxar uma borda alem da oposta no redimensionar.
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 // Intervalo minimo entre mensagens de movimento enviadas ao overlay.
@@ -128,6 +132,8 @@ type ResizeState = {
   startY: number | null;
   startCX: number;
   startCY: number;
+  startFlipX: boolean;
+  startFlipY: boolean;
 };
 
 type DragState = {
@@ -148,6 +154,8 @@ type FreeResizeState = {
   startClientY: number;
   startScaleX: number;
   startScaleY: number | null;
+  startFlipX: boolean;
+  startFlipY: boolean;
 };
 
 // Item de uma cena salva, como vem de /api/scenes/<id> (ja normalizado no
@@ -165,6 +173,8 @@ type SceneSnapshotItem = {
   volume: number;
   muted: boolean;
   hidden: boolean;
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 type BgMode = "none" | "twitch" | "obs" | "ref";
@@ -412,6 +422,8 @@ export function Mesa({
           muted?: boolean;
           hidden?: boolean;
           pausado?: boolean;
+          flipX?: boolean;
+          flipY?: boolean;
         };
         const recovered: PlacedItem[] = (data.items as Row[]).map((row) => {
           const found = row.mediaId ? media.find((m) => m.id === row.mediaId) : undefined;
@@ -434,6 +446,8 @@ export function Mesa({
             muted: Boolean(row.muted),
             hidden: Boolean(row.hidden),
             pausado: Boolean(row.pausado),
+            flipX: Boolean(row.flipX),
+            flipY: Boolean(row.flipY),
           };
         });
 
@@ -558,6 +572,8 @@ export function Mesa({
         volume: item.volume,
         muted: item.muted,
         hidden: item.hidden,
+        flipX: !!item.flipX,
+        flipY: !!item.flipY,
         commit,
       }),
     }).catch(() => {});
@@ -1014,12 +1030,14 @@ export function Mesa({
       return {
         itemId, streamer: streamerSlug, type, text: src.text ?? "",
         sticky: true, x, y, scale: src.scaleX, hidden: src.hidden,
+        flipX: !!src.flipX, flipY: !!src.flipY,
       };
     }
     if (type === "EMBED") {
       return {
         itemId, streamer: streamerSlug, type: "EMBED", url: src.media.url,
         sticky: true, x, y, scale: src.scaleX, scaleY: src.scaleY, hidden: src.hidden,
+        flipX: !!src.flipX, flipY: !!src.flipY,
       };
     }
     if (type === "AUDIO") {
@@ -1032,6 +1050,7 @@ export function Mesa({
       itemId, mediaId: src.media.id, streamer: streamerSlug, sticky: true,
       x, y, scale: src.scaleX, scaleY: src.scaleY,
       volume: src.volume, muted: src.muted, hidden: src.hidden,
+      flipX: !!src.flipX, flipY: !!src.flipY,
     };
   }
 
@@ -1444,6 +1463,8 @@ export function Mesa({
       // nao uma mudanca na cena. Sem isto, apertar Parar com uma cena aberta
       // gravaria a cena inteira como oculta.
       hidden: it.hidden && !it.pausado,
+      flipX: !!it.flipX,
+      flipY: !!it.flipY,
     }));
   }
 
@@ -1500,6 +1521,8 @@ export function Mesa({
           volume: snap.volume,
           muted: snap.muted,
           hidden: snap.hidden,
+          flipX: !!snap.flipX,
+          flipY: !!snap.flipY,
         };
         const r = await fetch("/api/trigger/show", {
           method: "POST",
@@ -1640,6 +1663,8 @@ export function Mesa({
         startClientY: e.clientY,
         startScaleX: item.scaleX,
         startScaleY: isText ? null : h,
+        startFlipX: !!item.flipX,
+        startFlipY: !!item.flipY,
       };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       return;
@@ -1664,14 +1689,21 @@ export function Mesa({
     const dx = (e.clientX - f.startClientX) / rect.width;
     const dy = (e.clientY - f.startClientY) / rect.height;
 
-    const nx = clamp(f.startScaleX + dx * 2, MIN_SCALE, MAX_SCALE);
-    const patch: Partial<PlacedItem> = f.isText
-      ? { scaleX: nx, scaleY: null }
-      : {
-          scaleX: nx,
-          scaleY:
-            f.startScaleY == null ? null : clamp(f.startScaleY + dy * 2, MIN_SCALE, MAX_SCALE),
-        };
+    // Encolher alem de zero vira o item do avesso (espelha), como no OBS.
+    const mx = medidaComEspelho(f.startScaleX + dx * 2, MIN_SCALE, MAX_SCALE);
+    const flipX = espelhoFinal(f.startFlipX, mx.invertido);
+    let patch: Partial<PlacedItem>;
+    if (f.isText || f.startScaleY == null) {
+      patch = { scaleX: mx.tamanho, scaleY: null, flipX };
+    } else {
+      const my = medidaComEspelho(f.startScaleY + dy * 2, MIN_SCALE, MAX_SCALE);
+      patch = {
+        scaleX: mx.tamanho,
+        scaleY: my.tamanho,
+        flipX,
+        flipY: espelhoFinal(f.startFlipY, my.invertido),
+      };
+    }
     const next = patchItem(f.itemId, patch);
     if (next) pushMove(next, commit);
   }
@@ -1775,6 +1807,8 @@ export function Mesa({
       startY: isText ? null : hh,
       startCX: item.x,
       startCY: item.y,
+      startFlipX: !!item.flipX,
+      startFlipY: !!item.flipY,
     };
   }
 
@@ -1789,8 +1823,14 @@ export function Mesa({
     // Texto: delta relativo ao ponto agarrado (anchorX = cursor no down).
     if (r.isText) {
       const deltaFrac = (cx - r.anchorX) * r.dirX;
-      const nx = clamp(r.startX + deltaFrac, MIN_SCALE, MAX_SCALE);
-      const nextText = patchItem(r.itemId, { scaleX: nx, scaleY: null, x: r.startCX, y: r.startCY });
+      const m = medidaComEspelho(r.startX + deltaFrac, MIN_SCALE, MAX_SCALE);
+      const nextText = patchItem(r.itemId, {
+        scaleX: m.tamanho,
+        scaleY: null,
+        x: r.startCX,
+        y: r.startCY,
+        flipX: espelhoFinal(r.startFlipX, m.invertido),
+      });
       if (nextText) pushMove(nextText, commit);
       return;
     }
@@ -1799,21 +1839,29 @@ export function Mesa({
     let ny: number | null = r.startY;
     let ncx = r.startCX;
     let ncy = r.startCY;
+    let flipX = r.startFlipX;
+    let flipY = r.startFlipY;
 
+    // Puxar a borda alem da oposta espelha o item: a ancora continua fixa e
+    // ele passa a crescer para o outro lado (esquerda/direita e cima/baixo).
     if (r.hasX) {
-      const signedW = (cx - r.anchorX) * r.dirX; // largura crescendo a partir da ancora
-      nx = clamp(signedW, MIN_SCALE, MAX_SCALE);
-      ncx = clampPos(r.anchorX + (r.dirX * nx) / 2);
+      const m = medidaComEspelho((cx - r.anchorX) * r.dirX, MIN_SCALE, MAX_SCALE);
+      const lado = m.invertido ? -r.dirX : r.dirX;
+      nx = m.tamanho;
+      ncx = clampPos(centroAPartirDaAncora(r.anchorX, lado, nx));
+      flipX = espelhoFinal(r.startFlipX, m.invertido);
     }
     if (r.hasY) {
-      const signedH = (cy - r.anchorY) * r.dirY;
-      ny = clamp(signedH, MIN_SCALE, MAX_SCALE);
-      ncy = clampPos(r.anchorY + (r.dirY * ny) / 2);
+      const m = medidaComEspelho((cy - r.anchorY) * r.dirY, MIN_SCALE, MAX_SCALE);
+      const lado = m.invertido ? -r.dirY : r.dirY;
+      ny = m.tamanho;
+      ncy = clampPos(centroAPartirDaAncora(r.anchorY, lado, ny));
+      flipY = espelhoFinal(r.startFlipY, m.invertido);
     }
 
     const patch = r.isText
-      ? { scaleX: nx, scaleY: null, x: ncx, y: r.startCY }
-      : { scaleX: nx, scaleY: ny, x: ncx, y: ncy };
+      ? { scaleX: nx, scaleY: null, x: ncx, y: r.startCY, flipX }
+      : { scaleX: nx, scaleY: ny, x: ncx, y: ncy, flipX, flipY };
     const next = patchItem(r.itemId, patch);
     if (next) pushMove(next, commit);
   }
@@ -2731,6 +2779,34 @@ export function Mesa({
           )}
         </p>
       )}
+      {bgMode === "twitch" && streamerSlug && (
+        // O player embutido da Twitch so reconhece quem esta assistindo pelo
+        // cookie de login do proprio twitch.tv — nao da para passar a conta
+        // por aqui. Com o cookie liberado, o sub (ou Turbo) da pessoa vale e a
+        // live do fundo fica sem anuncio, como no site da Twitch.
+        <details className="obs-help">
+          <summary>Sou sub do canal — como tirar os anúncios do fundo?</summary>
+          <ol style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
+            <li>
+              Entre na sua conta em <strong>twitch.tv</strong> neste mesmo navegador
+              (a conta que tem o sub ou Turbo).
+            </li>
+            <li>
+              Libere os cookies da Twitch aqui dentro. No Chrome/Edge:{" "}
+              <strong>Configurações → Privacidade e segurança → Cookies de terceiros →
+              Sites que podem usar cookies de terceiros → Adicionar</strong> e coloque{" "}
+              <code>[*.]twitch.tv</code>. Ou clique no ícone de olho/cadeado na barra de
+              endereço e permita cookies de terceiros para este site.
+            </li>
+            <li>Recarregue a página. O player passa a reconhecer a sua conta.</li>
+          </ol>
+          <p style={{ margin: "0.5rem 0 0" }}>
+            A Twitch só deixa o player saber quem está assistindo por esse login
+            dela — o login no Bastidores não serve para isso. Sem o sub/Turbo, os
+            anúncios continuam aparecendo normalmente.
+          </p>
+        </details>
+      )}
     </>
   );
 
@@ -3275,7 +3351,7 @@ export function Mesa({
                   if (el) boxEls.current.set(it.itemId, el);
                   else boxEls.current.delete(it.itemId);
                 }}
-                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                className={`mesa-item text-item${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${it.flipX ? " espelho-x" : ""}${it.flipY ? " espelho-y" : ""}`}
                 style={
                   {
                     left: `${it.x * 100}%`,
@@ -3316,7 +3392,7 @@ export function Mesa({
                   if (el) boxEls.current.set(it.itemId, el);
                   else boxEls.current.delete(it.itemId);
                 }}
-                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+                className={`mesa-item embed-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${it.flipX ? " espelho-x" : ""}${it.flipY ? " espelho-y" : ""}`}
                 style={{
                   left: `${it.x * 100}%`,
                   top: `${it.y * 100}%`,
@@ -3356,7 +3432,7 @@ export function Mesa({
                 if (el) boxEls.current.set(it.itemId, el);
                 else boxEls.current.delete(it.itemId);
               }}
-              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}`}
+              className={`mesa-item${it.scaleY != null ? " stretched" : ""}${isSel ? " selected" : ""}${it.hidden ? " hidden" : ""}${it.flipX ? " espelho-x" : ""}${it.flipY ? " espelho-y" : ""}`}
               style={{
                 left: `${it.x * 100}%`,
                 top: `${it.y * 100}%`,
