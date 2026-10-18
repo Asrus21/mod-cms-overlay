@@ -2888,6 +2888,21 @@ export function Mesa({
 
   const obsUrl = streamerSlug ? `${PUBLIC_ORIGIN}/overlay/${streamerSlug}` : "";
 
+  // Sair da conta. Oculta antes o que estiver a mostra nas lives: o aviso
+  // automatico de "fechou a aba" sai depois do logout, ja sem a sessao, e o
+  // servidor o recusaria — os itens ficariam presos na tela do streamer.
+  const [saindo, setSaindo] = useState(false);
+  async function sairDaConta() {
+    if (saindo) return;
+    setSaindo(true);
+    try {
+      await fetch("/api/trigger/ocultar-tudo", { method: "POST" }).catch(() => {});
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/mod/painelMod/login";
+    }
+  }
+
   const GRUPOS_CONFIG: ReadonlyArray<{
     id: string;
     nome: string;
@@ -3124,6 +3139,24 @@ export function Mesa({
             </div>
           ))}
         </dl>
+      ),
+    },
+    {
+      id: "conta",
+      nome: "Conta",
+      resumo: meuCanal ? `conectado como ${meuCanal}` : "sair da conta",
+      conteudo: (
+        <>
+          <p className="mesa-audio-note" style={{ margin: "0 0 0.5rem" }}>
+            {meuCanal ? (
+              <>Você está conectado como <strong>{meuCanal}</strong>. </>
+            ) : null}
+            Ao sair, tudo o que estiver visível nas lives é ocultado.
+          </p>
+          <button onClick={sairDaConta} disabled={saindo}>
+            {saindo ? "Saindo…" : "Sair da conta"}
+          </button>
+        </>
       ),
     },
   ];
