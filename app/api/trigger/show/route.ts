@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
     volume?: number;
     muted?: boolean;
     hidden?: boolean;
+    flipX?: boolean;
+    flipY?: boolean;
   };
 
   // Item "widget" (relogio/contagem/cronometro): tambem nao tem midia na
@@ -194,6 +196,8 @@ export async function POST(request: NextRequest) {
   const volume = typeof body.volume === "number" ? clamp(body.volume, 0, 1) : 1;
   const muted = Boolean(body.muted);
   const hidden = Boolean(body.hidden);
+  const flipX = Boolean(body.flipX);
+  const flipY = Boolean(body.flipY);
 
   // Publica primeiro; so registra no log se o overlay realmente foi acionado.
   try {
@@ -214,6 +218,8 @@ export async function POST(request: NextRequest) {
       volume,
       muted,
       hidden,
+      flipX,
+      flipY,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao publicar no overlay";
@@ -236,6 +242,8 @@ export async function POST(request: NextRequest) {
     volume,
     muted,
     hidden,
+    flipX,
+    flipY,
     sticky,
     expiresAt: sticky ? null : new Date(Date.now() + durationMs),
   };

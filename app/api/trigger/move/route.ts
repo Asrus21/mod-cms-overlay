@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
     volume?: number;
     muted?: boolean;
     hidden?: boolean;
+    flipX?: boolean;
+    flipY?: boolean;
     commit?: boolean;
   } | null;
 
@@ -66,6 +68,9 @@ export async function POST(request: NextRequest) {
   const muted = Boolean(body.muted);
   // hidden so e enviado quando muda (toggle); undefined = mantem o estado atual.
   const hidden = typeof body.hidden === "boolean" ? body.hidden : undefined;
+  // Idem para o espelho: ausente = nao mexe.
+  const flipX = typeof body.flipX === "boolean" ? body.flipX : undefined;
+  const flipY = typeof body.flipY === "boolean" ? body.flipY : undefined;
 
   try {
     await publishMove(streamer, {
@@ -78,6 +83,8 @@ export async function POST(request: NextRequest) {
       volume,
       muted,
       hidden,
+      flipX,
+      flipY,
       triggeredAt: Date.now(),
     });
   } catch (err) {
@@ -102,6 +109,8 @@ export async function POST(request: NextRequest) {
           // Mostrado a mao durante a pausa: sai dela. Senao um Parar depois
           // de um Continuar parcial confundiria o que e de quem.
           ...(hidden === false ? { pausado: false } : {}),
+          ...(typeof flipX === "boolean" ? { flipX } : {}),
+          ...(typeof flipY === "boolean" ? { flipY } : {}),
         },
       });
     } catch {
